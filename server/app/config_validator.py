@@ -44,6 +44,16 @@ def validate_config(config: dict, provider: str | None) -> bool:
             "or AZURE_VOICE_LIVE_API_KEY."
         )
 
+    if str(config.get("ENABLE_FOUNDRY_IQ", "false")).lower() == "true":
+        if not config.get("AZURE_AI_FOUNDRY_PROJECT_NAME"):
+            errors.append(
+                "AZURE_AI_FOUNDRY_PROJECT_NAME is required when ENABLE_FOUNDRY_IQ=true."
+            )
+        if not config.get("AZURE_AI_FOUNDRY_AGENT_ID"):
+            errors.append(
+                "AZURE_AI_FOUNDRY_AGENT_ID is required when ENABLE_FOUNDRY_IQ=true."
+            )
+
     if errors:
         logger.error("=" * 60)
         logger.error("STARTUP CONFIGURATION ERRORS:")

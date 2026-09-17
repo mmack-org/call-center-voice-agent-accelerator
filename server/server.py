@@ -33,6 +33,13 @@ app.config["VOICE_LIVE_MODEL"] = os.getenv("VOICE_LIVE_MODEL", "gpt-realtime")
 app.config["AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID"] = os.getenv(
     "AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID", ""
 )
+app.config["ENABLE_FOUNDRY_IQ"] = os.getenv("ENABLE_FOUNDRY_IQ", "false")
+app.config["AZURE_AI_FOUNDRY_PROJECT_NAME"] = os.getenv(
+    "AZURE_AI_FOUNDRY_PROJECT_NAME", ""
+)
+app.config["AZURE_AI_FOUNDRY_AGENT_ID"] = os.getenv(
+    "AZURE_AI_FOUNDRY_AGENT_ID", ""
+)
 app.config["AMBIENT_PRESET"] = os.getenv("AMBIENT_PRESET", "none")
 
 # Log ambient configuration on startup
