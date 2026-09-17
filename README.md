@@ -39,6 +39,7 @@ The solution includes:
 
   > **Telephony selection:** Only one telephony provider can be active at a time. The service automatically selects the provider based on the configured credentials. If no credentials are provided, Azure Communication Services is used by default.
 - **Ambient Scenes** (optional): Add realistic background audio (office, call center) or use custom audio files to simulate real-world environments
+- **Foundry IQ knowledge** (optional): Ground browser and phone answers in managed Azure AI Search content through a Foundry agent
 - Flexible configuration to customize prompts, ASR, TTS, and behavior
 - Easy extension to other client types
 
@@ -182,6 +183,9 @@ To change the `azd` parameters from the default values, follow the steps [here](
 
 5. To select or upgrade the provisioned model without changing application
    code, follow [Foundry project and realtime model](./docs/foundry-project.md).
+
+   To add grounded organizational knowledge, follow
+   [Foundry IQ knowledge for voice calls](./docs/foundry-iq.md).
 
 6. To view live logs:
 
@@ -498,7 +502,13 @@ Please follow the instructions in [the server README](./server/README.md).
 
 The Voice Live API supports connecting to an existing **Azure AI Foundry Agent**, allowing you to leverage pre-built capabilities, knowledge bases, and orchestration features alongside real-time voice interactions.
 
-In the `session.update` configuration, you can set different properties such as the model, voice settings, turn detection, and agent connection. For detailed configuration options and step-by-step instructions, refer to the official documentation:
+This accelerator can provision a Foundry agent with a Foundry IQ knowledge
+base and route every browser and telephony session to it. The feature is
+disabled by default so the existing direct realtime-model path remains
+unchanged. See [Foundry IQ knowledge for voice calls](./docs/foundry-iq.md) for
+deployment, sample ingestion, validation, security, and troubleshooting.
+
+For detailed Voice Live agent configuration options, refer to the official documentation:
 
 👉 [Get started with Voice Live and Azure AI Foundry Agent Service](https://learn.microsoft.com/azure/ai-services/speech-service/voice-live-agents-quickstart?tabs=windows%2Ckeyless&pivots=ai-foundry-portal)
 

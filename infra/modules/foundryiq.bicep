@@ -129,10 +129,10 @@ resource provisionerSearchDataContributor 'Microsoft.Authorization/roleAssignmen
 }
 
 resource provisionerFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiServicesId, provisioningIdentity.id, 'Cognitive Services User')
+  name: guid(aiServicesId, provisioningIdentity.id, 'Foundry User')
   scope: aiServices
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '53ca6127-db72-4b80-b1b0-d745d6d5456d')
     principalId: provisioningIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }

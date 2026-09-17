@@ -176,6 +176,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               name: 'DEBUG_MODE'
               value: string(debugMode)
             }
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: appInsightsConnectionString
+            }
           ], !empty(acsConnectionStringSecretUri) ? [
             {
               name: 'ACS_CONNECTION_STRING'

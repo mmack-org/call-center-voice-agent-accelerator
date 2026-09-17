@@ -106,8 +106,18 @@ knowledge_base_body="$(jq -n \
 put_search_object "knowledgebases/${KNOWLEDGE_BASE_NAME}" "${knowledge_base_body}"
 
 agent_url="${PROJECT_ENDPOINT}/agents/${AGENT_NAME}?api-version=v1"
-agent_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-  --oauth2-bearer "${foundry_token}" "${agent_url}")"
+agent_status="000"
+for _ in $(seq 1 18); do
+  agent_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    --oauth2-bearer "${foundry_token}" "${agent_url}")"
+  if [[ "${agent_status}" == "200" || "${agent_status}" == "404" ]]; then
+    break
+  fi
+  if [[ "${agent_status}" != "401" && "${agent_status}" != "403" ]]; then
+    break
+  fi
+  sleep 10
+done
 
 if [[ "${agent_status}" == "404" ]]; then
   agent_body="$(jq -n \
@@ -132,11 +142,19 @@ if [[ "${agent_status}" == "404" ]]; then
       }
     }')"
 
-  curl --fail-with-body --silent --show-error \
-    --request POST "${PROJECT_ENDPOINT}/agents?api-version=v1" \
-    --oauth2-bearer "${foundry_token}" \
-    --header "Content-Type: application/json" \
-    --data "${agent_body}" >/dev/null
+  for attempt in $(seq 1 18); do
+    if curl --fail-with-body --silent --show-error \
+      --request POST "${PROJECT_ENDPOINT}/agents?api-version=v1" \
+      --oauth2-bearer "${foundry_token}" \
+      --header "Content-Type: application/json" \
+      --data "${agent_body}" >/dev/null; then
+      break
+    fi
+    if [[ "${attempt}" -eq 18 ]]; then
+      exit 1
+    fi
+    sleep 10
+  done
 elif [[ "${agent_status}" != "200" ]]; then
   echo "Unable to query Foundry agent '${AGENT_NAME}' (HTTP ${agent_status})." >&2
   exit 1

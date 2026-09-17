@@ -261,6 +261,7 @@ module containerapp 'modules/containerapp.bicep' = {
     bandwidthAccountId: bandwidthAccountId
     bandwidthApplicationId: bandwidthApplicationId
     logAnalyticsWorkspaceName: logAnalyticsName
+    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     debugMode: debugMode
     imageName: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
   }
@@ -291,6 +292,7 @@ output AZURE_VOICE_LIVE_ENDPOINT string = aiServices.outputs.aiServicesEndpoint
 output AZURE_VOICE_LIVE_MODEL string = aiServices.outputs.modelDeploymentName
 output AZURE_AI_FOUNDRY_PROJECT_ID string = aiServices.outputs.projectId
 output AZURE_AI_FOUNDRY_PROJECT_NAME string = aiServices.outputs.projectName
+output AZURE_AI_FOUNDRY_PROJECT_ENDPOINT string = aiServices.outputs.projectEndpoint
 output AZURE_AI_FOUNDRY_CONNECTION_NAME string = aiServices.outputs.projectConnectionName
 output ENABLE_FOUNDRY_IQ bool = enableFoundryIq
 output AZURE_AI_SEARCH_SERVICE_NAME string = enableFoundryIq ? foundryIq.outputs.searchServiceName : ''

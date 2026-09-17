@@ -34,6 +34,7 @@ from .ambient_mixer import AmbientMixer
 Data = Union[str, bytes]
 
 logger = logging.getLogger(__name__)
+telemetry_logger = logging.getLogger("telemetry.voicelive")
 
 # Default chunk size in bytes (100ms of audio at 24kHz, 16-bit mono)
 DEFAULT_CHUNK_SIZE = 4800  # 24000 samples/sec * 0.1 sec * 2 bytes
@@ -99,17 +100,43 @@ class VoiceLiveMediaHandler:
             voice=AzureStandardVoice(name="en-US-Aria:DragonHDLatestNeural", temperature=0.8),
         )
 
-    def _log_tool_event(self, event, event_name: str) -> None:
+    @staticmethod
+    def _mcp_result_count(output: str | None) -> int:
+        """Count result containers in an MCP response without logging their content."""
+        if not output:
+            return 0
+        try:
+            pending = [json.loads(output)]
+        except (TypeError, json.JSONDecodeError):
+            return -1
+
+        result_keys = {"results", "documents", "references", "citations"}
+        while pending:
+            value = pending.pop()
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key.lower() in result_keys and isinstance(child, list):
+                        return len(child)
+                    if isinstance(child, (dict, list)):
+                        pending.append(child)
+            elif isinstance(value, list):
+                pending.extend(value)
+        return -1
+
+    def _log_tool_event(
+        self, event, event_name: str, result_count: int | None = None
+    ) -> None:
         """Log tool timing and outcome metadata without recording retrieved content."""
         normalized = event_name.lower()
-        if "started" in normalized or "arguments.added" in normalized:
+        if "in_progress" in normalized:
             self._tool_started_at = time.perf_counter()
 
-        status = "failed" if hasattr(event, "error") else "observed"
+        status = "failed" if getattr(event, "error", None) is not None else "observed"
         if "done" in normalized or "completed" in normalized:
             status = "succeeded" if status != "failed" else status
 
-        result_count = getattr(event, "result_count", -1)
+        if result_count is None:
+            result_count = getattr(event, "result_count", -1)
         if not isinstance(result_count, int):
             result_count = -1
         duration_ms = (
@@ -118,7 +145,7 @@ class VoiceLiveMediaHandler:
             else 0
         )
         empty = result_count == 0 if result_count >= 0 else "unknown"
-        logger.info(
+        telemetry_logger.info(
             "[VoiceLive] foundry_iq_tool event=%s status=%s duration_ms=%.0f result_count=%s empty=%s",
             event_name,
             status,
@@ -162,6 +189,11 @@ class VoiceLiveMediaHandler:
                 self.foundry_agent_name,
                 self.foundry_project_name,
             )
+            telemetry_logger.info(
+                "[VoiceLive] agent_invocation status=starting agent=%s project=%s",
+                self.foundry_agent_name,
+                self.foundry_project_name,
+            )
         else:
             connection_options["model"] = self.model.strip()
 
@@ -174,12 +206,16 @@ class VoiceLiveMediaHandler:
                     "[VoiceLive] agent_invocation status=failed duration_ms=%.0f",
                     (time.perf_counter() - t1) * 1000,
                 )
+                telemetry_logger.error(
+                    "[VoiceLive] agent_invocation status=failed duration_ms=%.0f",
+                    (time.perf_counter() - t1) * 1000,
+                )
             raise
 
         t2 = time.perf_counter()
         logger.info("[VoiceLive] SDK connected in %.2fs (total %.2fs)", t2 - t1, t2 - t0)
         if self.foundry_iq_enabled:
-            logger.info(
+            telemetry_logger.info(
                 "[VoiceLive] agent_invocation status=succeeded duration_ms=%.0f",
                 (t2 - t1) * 1000,
             )
@@ -244,11 +280,26 @@ class VoiceLiveMediaHandler:
                         logger.debug("[VoiceLive] AI: %s", transcript)
                         await self.on_transcript_done(transcript)
 
+                    case ServerEventType.RESPONSE_OUTPUT_ITEM_DONE:
+                        item = getattr(event, "item", None)
+                        if item and "mcp_call" in str(getattr(item, "type", "")).lower():
+                            self._log_tool_event(
+                                item,
+                                "response.mcp_call.output",
+                                self._mcp_result_count(getattr(item, "output", None)),
+                            )
+
                     case ServerEventType.RESPONSE_DONE:
                         response_id = event.response.id if hasattr(event, "response") else None
                         logger.info(
                             "[VoiceLive] Response done: id=%s end_to_end_latency_ms=%.0f",
                             response_id,
+                            (time.perf_counter() - self._response_started_at) * 1000
+                            if self._response_started_at
+                            else 0,
+                        )
+                        telemetry_logger.info(
+                            "[VoiceLive] response status=completed end_to_end_latency_ms=%.0f",
                             (time.perf_counter() - self._response_started_at) * 1000
                             if self._response_started_at
                             else 0,

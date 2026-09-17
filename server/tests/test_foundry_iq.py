@@ -4,7 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
@@ -109,7 +109,7 @@ class FoundryIqConfigurationTests(unittest.TestCase):
             "app.handler.voicelive_media_handler.voicelive_connect",
             return_value=FakeConnectionContext(error=RuntimeError("unavailable")),
         ), self.assertLogs(
-            "app.handler.voicelive_media_handler", logging.ERROR
+            "telemetry.voicelive", logging.ERROR
         ) as logs:
             with self.assertRaises(RuntimeError):
                 asyncio.run(handler.connect_voicelive())
@@ -120,7 +120,7 @@ class FoundryIqConfigurationTests(unittest.TestCase):
         handler = VoiceLiveMediaHandler(make_config(True))
 
         with self.assertLogs(
-            "app.handler.voicelive_media_handler", logging.INFO
+            "telemetry.voicelive", logging.INFO
         ) as logs:
             handler._log_tool_event(
                 SimpleNamespace(result_count=0),
@@ -131,6 +131,43 @@ class FoundryIqConfigurationTests(unittest.TestCase):
         self.assertIn("status=succeeded", output)
         self.assertIn("result_count=0", output)
         self.assertIn("empty=True", output)
+
+    def test_successful_retrieval_metadata_is_reported(self):
+        handler = VoiceLiveMediaHandler(make_config(True))
+
+        with self.assertLogs(
+            "telemetry.voicelive", logging.INFO
+        ) as logs:
+            handler._log_tool_event(
+                SimpleNamespace(result_count=2),
+                "response.mcp_call.completed",
+            )
+
+        output = "\n".join(logs.output)
+        self.assertIn("status=succeeded", output)
+        self.assertIn("result_count=2", output)
+        self.assertIn("empty=False", output)
+
+    def test_tool_failure_metadata_is_reported(self):
+        handler = VoiceLiveMediaHandler(make_config(True))
+
+        with self.assertLogs(
+            "telemetry.voicelive", logging.INFO
+        ) as logs:
+            handler._log_tool_event(
+                SimpleNamespace(error="tool unavailable"),
+                "response.mcp_call.completed",
+            )
+
+        output = "\n".join(logs.output)
+        self.assertIn("status=failed", output)
+        self.assertNotIn("tool unavailable", output)
+
+    def test_mcp_result_count_reads_only_result_metadata(self):
+        output = '{"structuredContent":{"results":[{"content":"private"}]}}'
+
+        self.assertEqual(VoiceLiveMediaHandler._mcp_result_count(output), 1)
+        self.assertEqual(VoiceLiveMediaHandler._mcp_result_count(""), 0)
 
 
 if __name__ == "__main__":
