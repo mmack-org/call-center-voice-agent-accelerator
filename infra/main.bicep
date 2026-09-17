@@ -6,7 +6,7 @@ targetScope = 'subscription'
 param environmentName string
 
 @minLength(1)
-@description('Primary location for all resources. Regions with pre-deployed models (gpt-4o-mini): eastus2, japaneast, southeastasia, swedencentral, westus2. Other regions require BYOM. See https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live')
+@description('Primary location for all resources. The pre-provision hook validates the selected realtime model and version against the current Azure model inventory.')
 @allowed([
   'australiaeast'
   'brazilsouth'
@@ -32,8 +32,19 @@ param environmentName string
 param location string
 
 param appExists bool
-@description('The OpenAI model name')
-param modelName string = 'gpt-4o-mini'
+@description('Foundry catalog model name. Override together with modelVersion when selecting another release.')
+param modelName string = 'gpt-realtime-1.5'
+@description('Foundry catalog model version.')
+param modelVersion string = '2026-02-23'
+@minLength(1)
+@maxLength(64)
+@description('Deployment name passed to the Voice Live realtime API.')
+param modelDeploymentName string = 'gpt-realtime'
+@description('Foundry deployment SKU.')
+param modelSkuName string = 'GlobalStandard'
+@minValue(1)
+@description('Deployment capacity in thousands of tokens per minute.')
+param modelCapacity int = 1
 @description('The selected telephony provider')
 @allowed(['acs', 'twilio', 'infobip', 'genesys', 'sinch', 'bandwidth'])
 param telephonyProvider string = 'acs'
@@ -121,6 +132,11 @@ module aiServices 'modules/aiservices.bicep' = {
     environmentName: environmentName
     uniqueSuffix: uniqueSuffix
     identityId: appIdentity.outputs.identityId
+    modelName: modelName
+    modelVersion: modelVersion
+    modelDeploymentName: modelDeploymentName
+    modelSkuName: modelSkuName
+    modelCapacity: modelCapacity
     tags: tags
   }
 }
@@ -162,6 +178,7 @@ module RoleAssignments 'modules/roleassignments.bicep' = {
   name: 'role-assignments'
   params: {
     identityPrincipalId: appIdentity.outputs.principalId
+    projectPrincipalId: aiServices.outputs.projectPrincipalId
     aiServicesId: aiServices.outputs.aiServicesId
     keyVaultName: keyVaultName
   }
@@ -181,7 +198,7 @@ module containerapp 'modules/containerapp.bicep' = {
     identityClientId: appIdentity.outputs.clientId
     containerRegistryName: registry.outputs.name
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
-    modelDeploymentName: modelName
+    modelDeploymentName: aiServices.outputs.modelDeploymentName
     acsConnectionStringSecretUri: keyvault.outputs.acsConnectionStringUri
     twilioAuthTokenSecretUri: keyvault.outputs.twilioAuthTokenUri
     infobipApiKeySecretUri: keyvault.outputs.infobipApiKeyUri
@@ -221,4 +238,9 @@ var providerEndpoints = {
 }
 output SERVICE_API_ENDPOINTS array = [providerEndpoints[telephonyProvider]]
 output AZURE_VOICE_LIVE_ENDPOINT string = aiServices.outputs.aiServicesEndpoint
-output AZURE_VOICE_LIVE_MODEL string = modelName
+output AZURE_VOICE_LIVE_MODEL string = aiServices.outputs.modelDeploymentName
+output AZURE_AI_FOUNDRY_PROJECT_ID string = aiServices.outputs.projectId
+output AZURE_AI_FOUNDRY_PROJECT_NAME string = aiServices.outputs.projectName
+output AZURE_AI_FOUNDRY_CONNECTION_NAME string = aiServices.outputs.projectConnectionName
+output AZURE_VOICE_LIVE_MODEL_NAME string = modelName
+output AZURE_VOICE_LIVE_MODEL_VERSION string = modelVersion

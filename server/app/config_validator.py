@@ -29,6 +29,12 @@ def validate_config(config: dict, provider: str | None) -> bool:
             "Set it in .env or as an environment variable pointing to your Azure AI Services endpoint."
         )
 
+    if not config.get("VOICE_LIVE_MODEL"):
+        errors.append(
+            "VOICE_LIVE_MODEL is required. "
+            "Set it to the Foundry realtime model deployment name."
+        )
+
     if not config.get("AZURE_VOICE_LIVE_API_KEY") and not config.get(
         "AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID"
     ):

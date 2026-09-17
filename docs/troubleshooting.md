@@ -113,3 +113,17 @@ az role assignment list --assignee $(az ad signed-in-user show --query id -o tsv
 ```
 
 If you only have resource group-level permissions, ask your subscription admin to grant Contributor + RBAC Administrator at subscription scope, or have them pre-create the resource group and grant you Owner on it.
+
+## Realtime Model Deployment Failures
+
+The pre-provision hook rejects a model version or SKU that is absent from the
+selected region's current Foundry inventory. Use the command printed in the
+error, set `AZURE_VOICE_LIVE_MODEL_NAME`,
+`AZURE_VOICE_LIVE_MODEL_VERSION`, and `AZURE_VOICE_LIVE_MODEL_SKU` to an
+available combination, and retry.
+
+If ARM reports `InsufficientQuota`, `InvalidResourceProperties`, or a capacity
+error for `realtimeDeployment`, request quota, reduce
+`AZURE_VOICE_LIVE_MODEL_CAPACITY`, select an available SKU, or choose another
+region. See [Foundry project and realtime model](./foundry-project.md) for the
+complete configuration and upgrade procedure.
