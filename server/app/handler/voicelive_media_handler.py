@@ -53,11 +53,18 @@ class VoiceLiveMediaHandler:
         self.model = config["VOICE_LIVE_MODEL"]
         self.api_key = config["AZURE_VOICE_LIVE_API_KEY"]
         self.client_id = config["AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID"]
+        self.foundry_iq_enabled = (
+            str(config.get("ENABLE_FOUNDRY_IQ", "false")).lower() == "true"
+        )
+        self.foundry_project_name = config.get("AZURE_AI_FOUNDRY_PROJECT_NAME", "")
+        self.foundry_agent_name = config.get("AZURE_AI_FOUNDRY_AGENT_ID", "")
         self.conn = None
         self._conn_ctx = None  # async context manager from SDK connect()
         self._credential = None  # kept alive for token refresh
         self._receiver_task = None
         self._voicelive_connected = False  # True while Voice Live WS is healthy
+        self._response_started_at = None
+        self._tool_started_at = None
 
         # Client WebSocket
         self.client_ws = None
@@ -92,6 +99,37 @@ class VoiceLiveMediaHandler:
             voice=AzureStandardVoice(name="en-US-Aria:DragonHDLatestNeural", temperature=0.8),
         )
 
+    def _log_tool_event(self, event, event_name: str) -> None:
+        """Log tool timing and outcome metadata without recording retrieved content."""
+        normalized = event_name.lower()
+        if "started" in normalized or "arguments.added" in normalized:
+            self._tool_started_at = time.perf_counter()
+
+        status = "failed" if hasattr(event, "error") else "observed"
+        if "done" in normalized or "completed" in normalized:
+            status = "succeeded" if status != "failed" else status
+
+        result_count = getattr(event, "result_count", -1)
+        if not isinstance(result_count, int):
+            result_count = -1
+        duration_ms = (
+            (time.perf_counter() - self._tool_started_at) * 1000
+            if self._tool_started_at
+            else 0
+        )
+        empty = result_count == 0 if result_count >= 0 else "unknown"
+        logger.info(
+            "[VoiceLive] foundry_iq_tool event=%s status=%s duration_ms=%.0f result_count=%s empty=%s",
+            event_name,
+            status,
+            duration_ms,
+            result_count,
+            empty,
+        )
+
+        if "done" in normalized or "completed" in normalized or status == "failed":
+            self._tool_started_at = None
+
     # ------------------------------------------------------------------
     # Voice Live connection
     # ------------------------------------------------------------------
@@ -109,15 +147,42 @@ class VoiceLiveMediaHandler:
         t1 = time.perf_counter()
         logger.info("[VoiceLive] Credential prepared in %.2fs", t1 - t0)
 
-        self._conn_ctx = voicelive_connect(
-            endpoint=self.endpoint,
-            credential=credential,
-            model=self.model.strip(),
-        )
-        self.conn = await self._conn_ctx.__aenter__()
+        connection_options = {
+            "endpoint": self.endpoint,
+            "credential": credential,
+        }
+        if self.foundry_iq_enabled:
+            connection_options.update(
+                agent_name=self.foundry_agent_name,
+                project_name=self.foundry_project_name,
+                api_version="2026-07-15",
+            )
+            logger.info(
+                "[VoiceLive] agent_invocation status=starting agent=%s project=%s",
+                self.foundry_agent_name,
+                self.foundry_project_name,
+            )
+        else:
+            connection_options["model"] = self.model.strip()
+
+        try:
+            self._conn_ctx = voicelive_connect(**connection_options)
+            self.conn = await self._conn_ctx.__aenter__()
+        except Exception:
+            if self.foundry_iq_enabled:
+                logger.exception(
+                    "[VoiceLive] agent_invocation status=failed duration_ms=%.0f",
+                    (time.perf_counter() - t1) * 1000,
+                )
+            raise
 
         t2 = time.perf_counter()
         logger.info("[VoiceLive] SDK connected in %.2fs (total %.2fs)", t2 - t1, t2 - t0)
+        if self.foundry_iq_enabled:
+            logger.info(
+                "[VoiceLive] agent_invocation status=succeeded duration_ms=%.0f",
+                (t2 - t1) * 1000,
+            )
         self._voicelive_connected = True
 
         await self.conn.session.update(session=self._session_config())
@@ -158,6 +223,7 @@ class VoiceLiveMediaHandler:
 
                     case ServerEventType.INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
                         logger.info("[VoiceLive] Speech stopped")
+                        self._response_started_at = time.perf_counter()
 
                     case ServerEventType.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
                         transcript = event.transcript
@@ -180,13 +246,24 @@ class VoiceLiveMediaHandler:
 
                     case ServerEventType.RESPONSE_DONE:
                         response_id = event.response.id if hasattr(event, "response") else None
-                        logger.info("[VoiceLive] Response done: id=%s", response_id)
+                        logger.info(
+                            "[VoiceLive] Response done: id=%s end_to_end_latency_ms=%.0f",
+                            response_id,
+                            (time.perf_counter() - self._response_started_at) * 1000
+                            if self._response_started_at
+                            else 0,
+                        )
+                        self._response_started_at = None
 
                     case ServerEventType.ERROR:
                         logger.error("[VoiceLive] Error: %s", event.error)
 
                     case _:
-                        logger.debug("[VoiceLive] Event: %s", event_type)
+                        event_name = str(event_type)
+                        if "mcp" in event_name.lower() or "tool" in event_name.lower():
+                            self._log_tool_event(event, event_name)
+                        else:
+                            logger.debug("[VoiceLive] Event: %s", event_type)
         except asyncio.CancelledError:
             cancelled = True
             raise

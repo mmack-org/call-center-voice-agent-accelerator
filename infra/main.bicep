@@ -77,6 +77,27 @@ param bandwidthAccountId string = ''
 param bandwidthApplicationId string = ''
 @description('Enable debug mode for verbose logging in the container app')
 param debugMode bool = false
+@description('Provision Azure AI Search, Foundry IQ sample knowledge, and a grounded Foundry agent.')
+param enableFoundryIq bool = false
+@description('Azure AI Search service name. Leave empty to generate a deterministic name.')
+param searchServiceName string = ''
+@description('Search index used by the sample Foundry IQ knowledge source.')
+param searchIndexName string = 'call-center-content'
+@description('Foundry IQ knowledge base name.')
+param foundryIqKnowledgeBaseName string = 'call-center-knowledge'
+@description('Foundry agent name used by Voice Live when Foundry IQ is enabled.')
+param foundryAgentName string = 'call-center-knowledge-agent'
+@description('Foundry catalog model used by the prompt agent.')
+param agentModelName string = 'gpt-4.1-mini'
+@description('Foundry prompt-agent model version.')
+param agentModelVersion string = '2025-04-14'
+@description('Deployment name for the Foundry prompt-agent model.')
+param agentModelDeploymentName string = 'gpt-4.1-mini'
+@description('Foundry prompt-agent deployment SKU.')
+param agentModelSkuName string = 'GlobalStandard'
+@minValue(1)
+@description('Foundry prompt-agent deployment capacity in thousands of tokens per minute.')
+param agentModelCapacity int = 10
 
 var uniqueSuffix = substring(uniqueString(subscription().id, environmentName), 0, 5)
 var tags = {'azd-env-name': environmentName }
@@ -141,6 +162,32 @@ module aiServices 'modules/aiservices.bicep' = {
   }
 }
 
+var generatedSearchServiceName = take(toLower(replace('srch-${environmentName}-${uniqueSuffix}', '_', '-')), 60)
+module foundryIq 'modules/foundryiq.bicep' = if (enableFoundryIq) {
+  name: 'foundry-iq'
+  scope: rg
+  params: {
+    location: location
+    environmentName: environmentName
+    uniqueSuffix: uniqueSuffix
+    tags: tags
+    aiServicesName: aiServices.outputs.aiServicesName
+    aiServicesId: aiServices.outputs.aiServicesId
+    projectName: aiServices.outputs.projectName
+    projectEndpoint: aiServices.outputs.projectEndpoint
+    projectPrincipalId: aiServices.outputs.projectPrincipalId
+    agentModelName: agentModelName
+    agentModelVersion: agentModelVersion
+    agentModelDeploymentName: agentModelDeploymentName
+    agentModelSkuName: agentModelSkuName
+    agentModelCapacity: agentModelCapacity
+    searchServiceName: empty(searchServiceName) ? generatedSearchServiceName : searchServiceName
+    searchIndexName: searchIndexName
+    knowledgeBaseName: foundryIqKnowledgeBaseName
+    agentName: foundryAgentName
+  }
+}
+
 module acs 'modules/acs.bicep' = if (telephonyProvider == 'acs') {
   name: 'acs-deployment'
   scope: rg
@@ -199,6 +246,9 @@ module containerapp 'modules/containerapp.bicep' = {
     containerRegistryName: registry.outputs.name
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
     modelDeploymentName: aiServices.outputs.modelDeploymentName
+    enableFoundryAgent: enableFoundryIq
+    foundryProjectName: aiServices.outputs.projectName
+    foundryAgentName: enableFoundryIq ? foundryIq.outputs.agentName : ''
     acsConnectionStringSecretUri: keyvault.outputs.acsConnectionStringUri
     twilioAuthTokenSecretUri: keyvault.outputs.twilioAuthTokenUri
     infobipApiKeySecretUri: keyvault.outputs.infobipApiKeyUri
@@ -242,5 +292,12 @@ output AZURE_VOICE_LIVE_MODEL string = aiServices.outputs.modelDeploymentName
 output AZURE_AI_FOUNDRY_PROJECT_ID string = aiServices.outputs.projectId
 output AZURE_AI_FOUNDRY_PROJECT_NAME string = aiServices.outputs.projectName
 output AZURE_AI_FOUNDRY_CONNECTION_NAME string = aiServices.outputs.projectConnectionName
+output ENABLE_FOUNDRY_IQ bool = enableFoundryIq
+output AZURE_AI_SEARCH_SERVICE_NAME string = enableFoundryIq ? foundryIq.outputs.searchServiceName : ''
+output AZURE_AI_SEARCH_ENDPOINT string = enableFoundryIq ? foundryIq.outputs.searchEndpoint : ''
+output AZURE_AI_SEARCH_INDEX_NAME string = enableFoundryIq ? foundryIq.outputs.searchIndexName : ''
+output AZURE_FOUNDRY_IQ_KNOWLEDGE_BASE_NAME string = enableFoundryIq ? foundryIq.outputs.knowledgeBaseName : ''
+output AZURE_FOUNDRY_IQ_CONNECTION_NAME string = enableFoundryIq ? foundryIq.outputs.projectConnectionName : ''
+output AZURE_AI_FOUNDRY_AGENT_ID string = enableFoundryIq ? foundryIq.outputs.agentName : ''
 output AZURE_VOICE_LIVE_MODEL_NAME string = modelName
 output AZURE_VOICE_LIVE_MODEL_VERSION string = modelVersion

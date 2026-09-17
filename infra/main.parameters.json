@@ -61,6 +61,36 @@
     },
     "debugMode": {
       "value": "${DEBUG_MODE=false}"
+    },
+    "enableFoundryIq": {
+      "value": "${ENABLE_FOUNDRY_IQ=false}"
+    },
+    "searchServiceName": {
+      "value": "${AZURE_AI_SEARCH_SERVICE_NAME=}"
+    },
+    "searchIndexName": {
+      "value": "${AZURE_AI_SEARCH_INDEX_NAME=call-center-content}"
+    },
+    "foundryIqKnowledgeBaseName": {
+      "value": "${AZURE_FOUNDRY_IQ_KNOWLEDGE_BASE_NAME=call-center-knowledge}"
+    },
+    "foundryAgentName": {
+      "value": "${AZURE_AI_FOUNDRY_AGENT_ID=call-center-knowledge-agent}"
+    },
+    "agentModelName": {
+      "value": "${AZURE_AI_AGENT_MODEL_NAME=gpt-4.1-mini}"
+    },
+    "agentModelVersion": {
+      "value": "${AZURE_AI_AGENT_MODEL_VERSION=2025-04-14}"
+    },
+    "agentModelDeploymentName": {
+      "value": "${AZURE_AI_AGENT_MODEL_DEPLOYMENT=gpt-4.1-mini}"
+    },
+    "agentModelSkuName": {
+      "value": "${AZURE_AI_AGENT_MODEL_SKU=GlobalStandard}"
+    },
+    "agentModelCapacity": {
+      "value": "${AZURE_AI_AGENT_MODEL_CAPACITY=10}"
     }
   }
 }
