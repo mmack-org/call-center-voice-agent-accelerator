@@ -1,4 +1,5 @@
 param identityPrincipalId string
+param projectPrincipalId string
 param aiServicesId string
 param keyVaultName string
 
@@ -16,26 +17,15 @@ resource aiServicesRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-resource azureAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiServicesId, identityPrincipalId, 'Azure AI User')
+resource projectAiServicesRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServicesId, projectPrincipalId, 'Cognitive Services User')
   scope: aiServicesResource
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '53ca6127-db72-4b80-b1b0-d745d6d5456d')
-    principalId: identityPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
+    principalId: projectPrincipalId
     principalType: 'ServicePrincipal'
   }
 }
-
-resource aiAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiServicesId, identityPrincipalId, 'ai-reader')
-  scope: aiServicesResource
-  properties: {
-    principalId: identityPrincipalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
-    principalType: 'ServicePrincipal'
-  }
-}
-
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = {
   name: keyVaultName

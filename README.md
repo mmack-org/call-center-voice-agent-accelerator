@@ -165,8 +165,8 @@ To change the `azd` parameters from the default values, follow the steps [here](
     ```
     It will prompt you to provide an `azd` environment name (like "voice-agent-dev"), select a subscription from your Azure account, and select a [Voice Live region](https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live).
 
-    The setup wizard will then guide you through:
-    - **Model selection** — choose from 12 fully managed models across Pro, Basic, and Lite tiers (or bring your own)
+    The setup hook will:
+    - **Validate the realtime deployment** — verify the configured model, version, and SKU against the live regional Foundry inventory
     - **Telephony provider selection** — choose ACS (default), Twilio, Infobip, Sinch, Genesys, or Bandwidth
     - **Credential entry** — securely prompts for tokens/keys only if you picked Twilio, Infobip, Sinch, Genesys, or Bandwidth
 
@@ -180,16 +180,8 @@ To change the `azd` parameters from the default values, follow the steps [here](
     azd deploy
     ```
 
-5. To switch models after deployment (no redeploy needed):
-
-    ```shell
-    az containerapp update -n <app-name> -g <resource-group> --set-env-vars "AZURE_VOICE_LIVE_MODEL=gpt-4.1-mini"
-    ```
-
-    The model is a runtime-only setting — changing it does not require `azd up` or any infrastructure changes. Update `azd env` too to keep future deploys consistent:
-    ```shell
-    azd env set AZURE_VOICE_LIVE_MODEL gpt-4.1-mini
-    ```
+5. To select or upgrade the provisioned model without changing application
+   code, follow [Foundry project and realtime model](./docs/foundry-project.md).
 
 6. To view live logs:
 
@@ -206,10 +198,9 @@ To change the `azd` parameters from the default values, follow the steps [here](
 
 
 >[!NOTE]
->- All [supported models](https://learn.microsoft.com/azure/ai-services/speech-service/voice-live#supported-models-and-regions) are fully managed — no deployment or capacity planning needed.
->- Pricing is tiered (Pro, Basic, Lite) based on the model you choose. Default is `gpt-4o-mini` (Basic tier).
->- **Not all models are available in every region.** The setup wizard validates your selection and will block incompatible model/region combinations. Models available in all regions include: `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-5`, `gpt-5-chat`, `gpt-5-mini`, `gpt-5-nano`.
->- See [Voice Live supported regions and models](https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live) for the full compatibility matrix.
+>- The template creates a project-enabled Foundry resource, project, secure project connection, and a pinned GPT Realtime deployment. See [Foundry project and realtime model](./docs/foundry-project.md) for defaults, outputs, regional checks, validation, and upgrades.
+>- **Not all model versions or SKUs are available in every region or subscription.** The pre-provision hook validates the live Azure inventory; ARM reports quota and capacity failures for the named deployment resource.
+>- See [Voice Live supported regions and models](https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live) and [Foundry model region availability](https://learn.microsoft.com/azure/ai-foundry/foundry-models/concepts/models-sold-directly-by-azure) before deployment.
 >- Post-Deployment: Webhook configuration is handled automatically by the post-deploy script. For ACS telephony, you'll still need to acquire a PSTN phone number (see [Testing the Agent](#testing-the-agent) below).
 
 

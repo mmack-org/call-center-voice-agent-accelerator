@@ -28,110 +28,49 @@ if (-not $account) {
 }
 Write-Host "Subscription: $($account.name) ($($account.id))" -ForegroundColor Green
 
-# --- Model selection ---
-$modelName = azd env get-value AZURE_VOICE_LIVE_MODEL 2>$null
-if ($LASTEXITCODE -ne 0) { $modelName = "" }
+# --- Model selection and availability validation ---
+$modelName = azd env get-value AZURE_VOICE_LIVE_MODEL_NAME 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($modelName)) {
+    $modelName = "gpt-realtime-2.1"
+    azd env set AZURE_VOICE_LIVE_MODEL_NAME $modelName
+}
+$modelVersion = azd env get-value AZURE_VOICE_LIVE_MODEL_VERSION 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($modelVersion)) {
+    $modelVersion = "2026-07-07"
+    azd env set AZURE_VOICE_LIVE_MODEL_VERSION $modelVersion
+}
+$deploymentName = azd env get-value AZURE_VOICE_LIVE_DEPLOYMENT_NAME 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($deploymentName)) {
+    $deploymentName = "gpt-realtime"
+    azd env set AZURE_VOICE_LIVE_DEPLOYMENT_NAME $deploymentName
+}
+$modelSku = azd env get-value AZURE_VOICE_LIVE_MODEL_SKU 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($modelSku)) {
+    $modelSku = "GlobalStandard"
+    azd env set AZURE_VOICE_LIVE_MODEL_SKU $modelSku
+}
 $selectedLocation = azd env get-value AZURE_LOCATION 2>$null
 if ($LASTEXITCODE -ne 0) { $selectedLocation = "" }
 
-if ([string]::IsNullOrWhiteSpace($modelName)) {
-    Write-Host ""
-    Write-Host "Model Selection" -ForegroundColor Yellow
-    Write-Host "---------------"
-    Write-Host "Your region: $selectedLocation"
-    Write-Host ""
-    Write-Host "All models are fully managed (no deployment or capacity planning needed)."
-    Write-Host "Pricing is determined by the model tier. See:" -ForegroundColor DarkGray
-    Write-Host "https://learn.microsoft.com/azure/ai-services/speech-service/voice-live#supported-models-and-regions" -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "  Voice Live Pro" -ForegroundColor Magenta
-    Write-Host "    [1]  gpt-realtime        Native audio I/O + Azure TTS (custom voice supported)"
-    Write-Host "    [2]  gpt-4o              Azure STT + GPT-4o + Azure TTS"
-    Write-Host "    [3]  gpt-4.1             Azure STT + GPT-4.1 + Azure TTS"
-    Write-Host "    [4]  gpt-5               Azure STT + GPT-5 + Azure TTS"
-    Write-Host "    [5]  gpt-5-chat          Azure STT + GPT-5 chat + Azure TTS"
-    Write-Host ""
-    Write-Host "  Voice Live Basic" -ForegroundColor Cyan
-    Write-Host "    [6]  gpt-realtime-mini   Native audio I/O + Azure TTS (custom voice supported)"
-    Write-Host "    [7]  gpt-4o-mini         Azure STT + GPT-4o mini + Azure TTS" -NoNewline
-    Write-Host " (default)" -ForegroundColor Green
-    Write-Host "    [8]  gpt-4.1-mini        Azure STT + GPT-4.1 mini + Azure TTS"
-    Write-Host "    [9]  gpt-5-mini          Azure STT + GPT-5 mini + Azure TTS"
-    Write-Host ""
-    Write-Host "  Voice Live Lite" -ForegroundColor DarkYellow
-    Write-Host "    [10] gpt-5-nano          Azure STT + GPT-5 nano + Azure TTS"
-    Write-Host "    [11] phi4-mm-realtime    Native Phi4-mm audio + Azure TTS"
-    Write-Host "    [12] phi4-mini           Azure STT + Phi4-mini + Azure TTS"
-    Write-Host ""
-    Write-Host "    [13] Custom (BYOM - bring your own model deployment)"
-    Write-Host ""
-    $modelChoice = Read-Host "Select model [7]"
-    if ([string]::IsNullOrWhiteSpace($modelChoice)) { $modelChoice = "7" }
+Write-Host "Foundry model: $modelName ($modelVersion), deployment: $deploymentName, SKU: $modelSku" -ForegroundColor Green
 
-    $modelMap = @{
-        "1"  = "gpt-realtime"
-        "2"  = "gpt-4o"
-        "3"  = "gpt-4.1"
-        "4"  = "gpt-5"
-        "5"  = "gpt-5-chat"
-        "6"  = "gpt-realtime-mini"
-        "7"  = "gpt-4o-mini"
-        "8"  = "gpt-4.1-mini"
-        "9"  = "gpt-5-mini"
-        "10" = "gpt-5-nano"
-        "11" = "phi4-mm-realtime"
-        "12" = "phi4-mini"
+if (-not [string]::IsNullOrWhiteSpace($selectedLocation)) {
+    $modelInventory = az cognitiveservices model list --location $selectedLocation --output json 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Unable to query the Foundry model inventory for '$selectedLocation'." -ForegroundColor Red
+        Write-Host "Verify Microsoft.CognitiveServices is registered and your account can list models, then retry." -ForegroundColor Yellow
+        exit 1
     }
 
-    if ($modelChoice -eq "13") {
-        $modelName = Read-Host "Enter your model deployment name"
-        if ([string]::IsNullOrWhiteSpace($modelName)) {
-            Write-Host "ERROR: Model deployment name is required." -ForegroundColor Red
-            exit 1
-        }
-    }
-    elseif ($modelMap.ContainsKey($modelChoice)) {
-        $modelName = $modelMap[$modelChoice]
-    }
-    else {
-        Write-Host "Invalid selection, using gpt-4o-mini." -ForegroundColor Yellow
-        $modelName = "gpt-4o-mini"
-    }
-
-    azd env set AZURE_VOICE_LIVE_MODEL $modelName
-    Write-Host "Model: $modelName" -ForegroundColor Green
-}
-else {
-    Write-Host "Model: $modelName (already configured)" -ForegroundColor Green
-}
-
-# --- Validate model-region compatibility ---
-# Models not listed here are available in ALL Voice Live regions.
-# See: https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live
-$regionModelSupport = @{
-    "gpt-realtime"      = @("australiaeast","canadaeast","eastus2","francecentral","southeastasia","swedencentral","uksouth","westus2")
-    "gpt-realtime-mini" = @("australiaeast","eastus2","francecentral","southeastasia","swedencentral","uksouth","westus2")
-    "gpt-4o"            = @("australiaeast","brazilsouth","eastus","eastus2","francecentral","italynorth","japaneast","norwayeast","southafricanorth","southcentralus","swedencentral","switzerlandnorth","uksouth","westeurope","westus","westus2","westus3")
-    "gpt-4o-mini"       = @("australiaeast","brazilsouth","eastus","eastus2","francecentral","italynorth","japaneast","norwayeast","southafricanorth","southcentralus","swedencentral","switzerlandnorth","uksouth","westeurope","westus","westus2","westus3")
-    "phi4-mm-realtime"  = @("eastus2","japaneast","swedencentral","westus2")
-    "phi4-mini"         = @("eastus2","japaneast","swedencentral","westus2")
-}
-
-if ($regionModelSupport.ContainsKey($modelName) -and -not [string]::IsNullOrWhiteSpace($selectedLocation)) {
-    $supportedRegions = $regionModelSupport[$modelName]
-    if ($selectedLocation -notin $supportedRegions) {
-        Write-Host ""
-        Write-Host "ERROR: '$modelName' is not available in '$selectedLocation' for Voice Live." -ForegroundColor Red
-        Write-Host "Supported regions for ${modelName}: $($supportedRegions -join ', ')" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "Options:" -ForegroundColor Cyan
-        Write-Host "  1. Change region:  azd env set AZURE_LOCATION <region>"
-        Write-Host "  2. Change model:   azd env set AZURE_VOICE_LIVE_MODEL <model>"
-        Write-Host ""
-        Write-Host "Models available in ALL Voice Live regions:" -ForegroundColor Green
-        Write-Host "  gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-5, gpt-5-chat, gpt-5-mini, gpt-5-nano" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "Full matrix: https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live" -ForegroundColor DarkGray
+    $matchingModel = @($modelInventory | ConvertFrom-Json | Where-Object {
+        $_.model.name -eq $modelName -and $_.model.version -eq $modelVersion
+    }) | Select-Object -First 1
+    $availableSkus = @($matchingModel.model.skus | ForEach-Object { $_.name })
+    if (-not $matchingModel -or $modelSku -notin $availableSkus) {
+        Write-Host "ERROR: Foundry model '$modelName' version '$modelVersion' with SKU '$modelSku' is unavailable in '$selectedLocation'." -ForegroundColor Red
+        Write-Host "Choose a supported region/model/version/SKU from:" -ForegroundColor Yellow
+        Write-Host "  az cognitiveservices model list --location $selectedLocation -o table"
+        Write-Host "Then set AZURE_VOICE_LIVE_MODEL_NAME, AZURE_VOICE_LIVE_MODEL_VERSION, and AZURE_VOICE_LIVE_MODEL_SKU with 'azd env set'." -ForegroundColor Yellow
         exit 1
     }
 }
