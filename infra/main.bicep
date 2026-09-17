@@ -33,9 +33,9 @@ param location string
 
 param appExists bool
 @description('Foundry catalog model name. Override together with modelVersion when selecting another release.')
-param modelName string = 'gpt-realtime-1.5'
+param modelName string = 'gpt-realtime-2.1'
 @description('Foundry catalog model version.')
-param modelVersion string = '2026-02-23'
+param modelVersion string = '2026-07-07'
 @minLength(1)
 @maxLength(64)
 @description('Deployment name passed to the Voice Live realtime API.')

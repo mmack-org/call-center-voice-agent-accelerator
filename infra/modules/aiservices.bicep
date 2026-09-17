@@ -75,6 +75,9 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
     displayName: 'Call Center Voice Agent'
     description: 'Foundry project for the call center realtime voice agent.'
   }
+  dependsOn: [
+    realtimeDeployment
+  ]
 }
 
 resource projectConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
@@ -86,6 +89,7 @@ resource projectConnection 'Microsoft.CognitiveServices/accounts/projects/connec
     target: aiServices.properties.endpoint
     isSharedToAll: false
     metadata: {
+      ApiType: 'Azure'
       ResourceId: aiServices.id
     }
   }

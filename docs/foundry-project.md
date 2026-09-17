@@ -24,8 +24,8 @@ for this template:
 
 | Setting | Default |
 |---|---|
-| `AZURE_VOICE_LIVE_MODEL_NAME` | `gpt-realtime-1.5` |
-| `AZURE_VOICE_LIVE_MODEL_VERSION` | `2026-02-23` |
+| `AZURE_VOICE_LIVE_MODEL_NAME` | `gpt-realtime-2.1` |
+| `AZURE_VOICE_LIVE_MODEL_VERSION` | `2026-07-07` |
 | `AZURE_VOICE_LIVE_DEPLOYMENT_NAME` | `gpt-realtime` |
 | `AZURE_VOICE_LIVE_MODEL_SKU` | `GlobalStandard` |
 | `AZURE_VOICE_LIVE_MODEL_CAPACITY` | `1` |

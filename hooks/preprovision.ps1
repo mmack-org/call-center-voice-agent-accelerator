@@ -31,12 +31,12 @@ Write-Host "Subscription: $($account.name) ($($account.id))" -ForegroundColor Gr
 # --- Model selection and availability validation ---
 $modelName = azd env get-value AZURE_VOICE_LIVE_MODEL_NAME 2>$null
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($modelName)) {
-    $modelName = "gpt-realtime-1.5"
+    $modelName = "gpt-realtime-2.1"
     azd env set AZURE_VOICE_LIVE_MODEL_NAME $modelName
 }
 $modelVersion = azd env get-value AZURE_VOICE_LIVE_MODEL_VERSION 2>$null
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($modelVersion)) {
-    $modelVersion = "2026-02-23"
+    $modelVersion = "2026-07-07"
     azd env set AZURE_VOICE_LIVE_MODEL_VERSION $modelVersion
 }
 $deploymentName = azd env get-value AZURE_VOICE_LIVE_DEPLOYMENT_NAME 2>$null
@@ -63,9 +63,9 @@ if (-not [string]::IsNullOrWhiteSpace($selectedLocation)) {
     }
 
     $matchingModel = @($modelInventory | ConvertFrom-Json | Where-Object {
-        $_.name -eq $modelName -and $_.version -eq $modelVersion
+        $_.model.name -eq $modelName -and $_.model.version -eq $modelVersion
     }) | Select-Object -First 1
-    $availableSkus = @($matchingModel.skus | ForEach-Object { $_.name })
+    $availableSkus = @($matchingModel.model.skus | ForEach-Object { $_.name })
     if (-not $matchingModel -or $modelSku -notin $availableSkus) {
         Write-Host "ERROR: Foundry model '$modelName' version '$modelVersion' with SKU '$modelSku' is unavailable in '$selectedLocation'." -ForegroundColor Red
         Write-Host "Choose a supported region/model/version/SKU from:" -ForegroundColor Yellow
