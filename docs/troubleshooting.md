@@ -127,3 +127,23 @@ error for `realtimeDeployment`, request quota, reduce
 `AZURE_VOICE_LIVE_MODEL_CAPACITY`, select an available SKU, or choose another
 region. See [Foundry project and realtime model](./foundry-project.md) for the
 complete configuration and upgrade procedure.
+
+## Foundry IQ Provisioning or Retrieval Failures
+
+Foundry IQ is optional. If `ENABLE_FOUNDRY_IQ=true`, `azd up` also provisions
+Blob Storage, Azure AI Search, ingestion and agent model deployments, a
+knowledge base, and a grounded prompt agent. Common causes of failure include:
+
+- missing Search, Storage, or Foundry data-plane roles for the deploying
+  identity
+- RBAC propagation delays immediately after provisioning
+- unavailable quota for `gpt-4.1-mini`, `gpt-5.2`, or
+  `text-embedding-3-large`
+- an empty Blob container or an indexer run that has not completed yet
+- an invalid managed-identity project connection or MCP tool configuration
+
+Follow the symptom-based checks in the
+[Foundry IQ troubleshooting table](./foundry-iq.md#troubleshooting). To isolate
+ingestion from the voice path, first verify the Search index and knowledge base,
+then test the prompt agent in the Foundry portal, and finally test the browser
+or telephony call.

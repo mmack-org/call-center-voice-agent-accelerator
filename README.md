@@ -13,7 +13,7 @@ Alternatively, telephony integration is supported through third-party providers,
 
 <div align="center">
   
-[**Features**](#features) \| [**Getting Started**](#getting-started) \| [**Testing the Agent**](#testing-the-agent) \| [**Local Development**](#local-development) \| [**Debugging Calls**](#debugging-calls) \| [**Production Readiness**](#production-readiness) \| [**Resources**](#resources)
+[**Features**](#features) \| [**Getting Started**](#getting-started) \| [**Testing the Agent**](#testing-the-agent) \| [**Local Development**](#local-development) \| [**Foundry IQ**](#use-voice-live-with-foundry-agents) \| [**Debugging Calls**](#debugging-calls) \| [**Production Readiness**](#production-readiness) \| [**Resources**](#resources)
 
 </div>
 
@@ -49,6 +49,27 @@ The solution includes:
 |![Architecture Diagram](./docs/images/architecture_v0.0.6.png)|
 |---|
 
+When Foundry IQ is enabled, the same browser and telephony entry points use a
+grounded Foundry agent instead of connecting Voice Live directly to the
+realtime model:
+
+```mermaid
+flowchart LR
+    Client[Browser or telephony provider] --> App[Azure Container App]
+    App --> VoiceLive[Azure Voice Live]
+    VoiceLive --> Mode{Foundry IQ enabled?}
+    Mode -->|No| Realtime[GPT Realtime deployment]
+    Mode -->|Yes| Agent[Foundry prompt agent]
+    Agent --> MCP[Foundry IQ MCP tool]
+    MCP --> Search[Azure AI Search knowledge base]
+    Blob[Private Blob container] --> Indexer[Managed ingestion pipeline]
+    Indexer --> Search
+```
+
+The Foundry IQ path is optional and disabled by default. See
+[Foundry IQ knowledge for voice calls](./docs/foundry-iq.md) for its complete
+architecture, managed-identity data flow, and deployment procedure.
+
 <br/>
 
 ## Getting Started
@@ -60,7 +81,7 @@ The solution includes:
 ### Prerequisites and Costs
 To deploy this solution accelerator, ensure you have access to an [Azure subscription](https://azure.microsoft.com/free/) with the necessary permissions to create **resource groups and resources**. Follow the steps in [Azure Account Set Up](./docs/AzureAccountSetUp.md).
 
-Check the [Azure Products by Region](https://azure.microsoft.com/explore/global-infrastructure/products-by-region/table) page and select a **region** where the following services are available: Azure AI Foundry Speech, Azure Communication Services, Azure Container Apps, and Container Registry.
+Check the [Azure Products by Region](https://azure.microsoft.com/explore/global-infrastructure/products-by-region/table) page and select a **region** where the following services are available: Azure AI Foundry Speech, Azure Communication Services, Azure Container Apps, and Container Registry. If you enable Foundry IQ, the region must also support Azure AI Search, Foundry Agent Service, Foundry IQ, and the additional chat and embedding models listed in the [Foundry IQ prerequisites](./docs/foundry-iq.md#prerequisites-and-regions).
 
 See [Voice Live supported regions](https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live) for a full list. Common choices include East US 2, Sweden Central, West US 2, and Southeast Asia.
 Pricing varies per region and usage, so it isn't possible to predict exact costs for your usage. The majority of the Azure resources used in this infrastructure are on usage-based pricing tiers. However, Azure Container Registry has a fixed cost per registry per day.
@@ -73,6 +94,9 @@ Use the [Azure pricing calculator](https://azure.microsoft.com/en-us/pricing/cal
 | [Azure Communication Services](https://learn.microsoft.com/azure/communication-services/overview) | Server-based intelligent call workflows | [Pricing](https://azure.microsoft.com/pricing/details/communication-services/) |
 | [Azure Container Apps](https://learn.microsoft.com/azure/container-apps/) | Hosts the web application frontend | [Pricing](https://azure.microsoft.com/pricing/details/container-apps/) |
 | [Azure Container Registry](https://learn.microsoft.com/azure/container-registry/) | Stores container images for deployment | [Pricing](https://azure.microsoft.com/pricing/details/container-registry/) |
+| [Azure AI Search](https://learn.microsoft.com/azure/search/search-what-is-azure-search) (optional) | Stores and retrieves Foundry IQ knowledge | [Pricing](https://azure.microsoft.com/pricing/details/search/) |
+| [Azure Blob Storage](https://learn.microsoft.com/azure/storage/blobs/storage-blobs-introduction) (optional) | Stores documents ingested by Foundry IQ | [Pricing](https://azure.microsoft.com/pricing/details/storage/blobs/) |
+| [Microsoft Foundry models](https://learn.microsoft.com/azure/ai-foundry/foundry-models/concepts/models-sold-directly-by-azure) (optional) | Runs Foundry IQ ingestion, answer synthesis, and the prompt agent | [Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/) |
 
 
 Here are some developers tools to set up as prerequisites:
@@ -159,7 +183,19 @@ To change the `azd` parameters from the default values, follow the steps [here](
     azd auth login
     ```
 
-2. Provision and deploy all the resources:
+2. Optional: enable Foundry IQ before the first deployment to provision the
+   knowledge layer and grounded agent:
+
+    ```shell
+    azd env set ENABLE_FOUNDRY_IQ true
+    ```
+
+   Leave it disabled to use the realtime model directly. Foundry IQ adds Azure
+   AI Search, Blob Storage, three model deployments, a knowledge base, and a
+   prompt agent. Review its [regional and quota requirements](./docs/foundry-iq.md#prerequisites-and-regions)
+   before enabling it.
+
+3. Provision and deploy all the resources:
 
     ```shell
     azd up
@@ -168,32 +204,33 @@ To change the `azd` parameters from the default values, follow the steps [here](
 
     The setup hook will:
     - **Validate the realtime deployment** — verify the configured model, version, and SKU against the live regional Foundry inventory
+    - **Configure Foundry IQ when enabled** — create the Blob-backed knowledge source, managed ingestion pipeline, knowledge base, project connection, and prompt agent
     - **Telephony provider selection** — choose ACS (default), Twilio, Infobip, Sinch, Genesys, or Bandwidth
     - **Credential entry** — securely prompts for tokens/keys only if you picked Twilio, Infobip, Sinch, Genesys, or Bandwidth
 
     After provisioning completes, you'll see a deployment summary with your webhook endpoint(s) and next steps.
 
-3. When `azd` has finished deploying, open the **Application URL** shown in the output to test in your browser. 🎉
+4. When `azd` has finished deploying, open the **Application URL** shown in the output to test in your browser. 🎉
 
-4. When you've made any changes to the app code, you can just run:
+5. When you've made any changes to the app code, you can just run:
 
     ```shell
     azd deploy
     ```
 
-5. To select or upgrade the provisioned model without changing application
+6. To select or upgrade the provisioned model without changing application
    code, follow [Foundry project and realtime model](./docs/foundry-project.md).
 
    To add grounded organizational knowledge, follow
    [Foundry IQ knowledge for voice calls](./docs/foundry-iq.md).
 
-6. To view live logs:
+7. To view live logs:
 
     ```shell
     azd monitor --logs
     ```
 
-7. When done, clean up all resources:
+8. When done, clean up all resources:
 
     ```shell
     azd down
@@ -505,17 +542,30 @@ The Voice Live API supports connecting to an existing **Azure AI Foundry Agent**
 This accelerator can provision a Foundry agent with a Foundry IQ knowledge
 base and route every browser and telephony session to it. The feature is
 disabled by default so the existing direct realtime-model path remains
-unchanged. See [Foundry IQ knowledge for voice calls](./docs/foundry-iq.md) for
-deployment, automatic Blob Storage ingestion, validation, security, and
-troubleshooting.
+unchanged.
+
+```shell
+azd env set ENABLE_FOUNDRY_IQ true
+azd up
+```
+
+The deployment creates a private Blob container, an Azure AI Search knowledge
+base with a five-minute managed ingestion schedule, a managed-identity project
+connection, and a Foundry prompt agent. Upload your organizational documents
+to the container, then test grounded answers from the browser or any configured
+phone provider. See [Foundry IQ knowledge for voice calls](./docs/foundry-iq.md)
+for supported configuration, document ingestion, validation, security,
+operations, and troubleshooting.
 
 For detailed Voice Live agent configuration options, refer to the official documentation:
 
 👉 [Get started with Voice Live and Azure AI Foundry Agent Service](https://learn.microsoft.com/azure/ai-services/speech-service/voice-live-agents-quickstart?tabs=windows%2Ckeyless&pivots=ai-foundry-portal)
 
-After updating your configuration, deploy the changes to your Container App:
+Changes to the provisioned Foundry IQ resources require provisioning and
+application deployment:
 
 ```bash
+azd provision
 azd deploy
 ```
 
@@ -598,6 +648,7 @@ See the [Troubleshooting Guide](./docs/troubleshooting.md) for common deployment
 - RequestConflict errors from concurrent deployments
 - Soft-deleted resource recovery
 - Required RBAC permissions
+- Foundry IQ provisioning, ingestion, and agent-tool failures
 
 <br/>
 
@@ -628,6 +679,8 @@ Before using this accelerator for production traffic, review the [Production Rea
 
 ## Resources
 - [📖 Docs: Voice live overview](https://learn.microsoft.com/azure/ai-services/speech-service/voice-live)
+- [📖 Guide: Foundry IQ knowledge for voice calls](./docs/foundry-iq.md)
+- [📖 Docs: What is Foundry IQ?](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq)
 - [📖 Blog: Upgrade your voice agent with Azure AI Voice Live API](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/upgrade-your-voice-agent-with-azure-ai-voice-live-api/4458247)
 - [📖 Docs: Azure Speech](https://learn.microsoft.com/azure/ai-services/speech-service/)
 - [📖 Docs: Azure Communication Services (Call Automation)](https://learn.microsoft.com/azure/communication-services/concepts/call-automation/call-automation)

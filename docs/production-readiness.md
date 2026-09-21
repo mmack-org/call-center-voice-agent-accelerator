@@ -67,8 +67,33 @@ For production, add dashboards and alerts for:
 - rejected calls (look for "Too Many Connections" or 4429 close codes)
 - idle disconnects (look for "Call expired" or "receive timeout")
 - Voice Live connection failures
+- Foundry agent connection failures, tool latency, and empty knowledge results when Foundry IQ is enabled
+- Foundry IQ indexer failures and ingestion delay
 - provider webhook failures (HTTP 4xx/5xx responses)
 - Container App restarts, replica count, CPU, and memory
+
+### Foundry IQ Knowledge
+
+Foundry IQ is optional and disabled by default. When enabled, it adds Blob
+Storage, Azure AI Search, a managed ingestion pipeline, three model
+deployments, and a Foundry prompt agent to the runtime path. Before production:
+
+- validate regional availability and quota for every configured realtime,
+  prompt-agent, answer-synthesis, and embedding model
+- replace the sample content process with an approved publishing and document
+  lifecycle, including ownership, review, retention, and deletion
+- monitor the managed indexer's execution history and account for the
+  five-minute ingestion schedule when defining content freshness expectations
+- test grounded and out-of-domain questions over both browser and telephony
+  paths, including agent-tool failures and empty results
+- review retrieved content and generated answers for quality, safety, and
+  compliance; grounding reduces hallucination risk but does not eliminate it
+- implement Search filters or security trimming plus authenticated caller
+  identity before indexing user-specific or access-controlled content
+
+Do not expose private indexed content to anonymous browser or PSTN callers.
+See [Foundry IQ knowledge for voice calls](./foundry-iq.md) for the deployed
+architecture, validation steps, authorization guidance, and cleanup behavior.
 
 ### Resilience and Retry Policy
 
@@ -109,7 +134,8 @@ Most production concerns (alerts, scaling, secret rotation, post-call ID storage
 3. Load test concurrent WebSocket calls to find your per-replica capacity.
 4. Add retry and timeout policies for outbound provider management API calls.
 5. Review privacy, retention, and responsible AI requirements.
-6. If you need multiple replicas: add shared TTL state, then validate how active calls behave when a replica restarts before enabling autoscale.
+6. If Foundry IQ is enabled: validate content governance, ingestion monitoring, grounding quality, and caller authorization.
+7. If you need multiple replicas: add shared TTL state, then validate how active calls behave when a replica restarts before enabling autoscale.
 
 ## References
 
@@ -118,4 +144,5 @@ Most production concerns (alerts, scaling, secret rotation, post-call ID storage
 - [Azure Cache for Redis overview](https://learn.microsoft.com/azure/azure-cache-for-redis/cache-overview)
 - [Application Insights overview](https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview)
 - [Azure Key Vault best practices](https://learn.microsoft.com/azure/key-vault/general/best-practices)
+- [Foundry IQ overview](https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq)
 - [Voice Live API transparency note](https://learn.microsoft.com/azure/ai-foundry/responsible-ai/speech-service/voice-live/transparency-note)
