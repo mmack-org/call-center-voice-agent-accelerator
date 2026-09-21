@@ -8,6 +8,10 @@ param identityClientId string
 param containerRegistryName string
 param aiServicesEndpoint string
 param modelDeploymentName string
+param voiceName string = 'fr-FR-DeniseNeural'
+param enableFoundryAgent bool = false
+param foundryProjectName string = ''
+param foundryAgentName string = ''
 param acsConnectionStringSecretUri string
 param twilioAuthTokenSecretUri string = ''
 param infobipApiKeySecretUri string = ''
@@ -158,8 +162,28 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               value: modelDeploymentName
             }
             {
+              name: 'VOICE_LIVE_VOICE'
+              value: voiceName
+            }
+            {
+              name: 'ENABLE_FOUNDRY_IQ'
+              value: string(enableFoundryAgent)
+            }
+            {
+              name: 'AZURE_AI_FOUNDRY_PROJECT_NAME'
+              value: foundryProjectName
+            }
+            {
+              name: 'AZURE_AI_FOUNDRY_AGENT_ID'
+              value: foundryAgentName
+            }
+            {
               name: 'DEBUG_MODE'
               value: string(debugMode)
+            }
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: appInsightsConnectionString
             }
           ], !empty(acsConnectionStringSecretUri) ? [
             {

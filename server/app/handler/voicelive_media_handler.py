@@ -34,9 +34,17 @@ from .ambient_mixer import AmbientMixer
 Data = Union[str, bytes]
 
 logger = logging.getLogger(__name__)
+telemetry_logger = logging.getLogger("telemetry.voicelive")
 
 # Default chunk size in bytes (100ms of audio at 24kHz, 16-bit mono)
 DEFAULT_CHUNK_SIZE = 4800  # 24000 samples/sec * 0.1 sec * 2 bytes
+DEFAULT_VOICE = "fr-FR-DeniseNeural"
+DIRECT_MODEL_INSTRUCTIONS = (
+    "Vous êtes un agent de support de centre d'appels. Répondez en français "
+    "par défaut, de façon claire, concise, naturelle et adaptée à un échange "
+    "téléphonique. Posez une question de clarification lorsque la demande est "
+    "ambiguë et n'inventez pas d'information."
+)
 
 
 class VoiceLiveMediaHandler:
@@ -53,11 +61,19 @@ class VoiceLiveMediaHandler:
         self.model = config["VOICE_LIVE_MODEL"]
         self.api_key = config["AZURE_VOICE_LIVE_API_KEY"]
         self.client_id = config["AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID"]
+        self.foundry_iq_enabled = (
+            str(config.get("ENABLE_FOUNDRY_IQ", "false")).lower() == "true"
+        )
+        self.foundry_project_name = config.get("AZURE_AI_FOUNDRY_PROJECT_NAME", "")
+        self.foundry_agent_name = config.get("AZURE_AI_FOUNDRY_AGENT_ID", "")
+        self.voice = config.get("VOICE_LIVE_VOICE", DEFAULT_VOICE)
         self.conn = None
         self._conn_ctx = None  # async context manager from SDK connect()
         self._credential = None  # kept alive for token refresh
         self._receiver_task = None
         self._voicelive_connected = False  # True while Voice Live WS is healthy
+        self._response_started_at = None
+        self._tool_started_at = None
 
         # Client WebSocket
         self.client_ws = None
@@ -81,16 +97,80 @@ class VoiceLiveMediaHandler:
 
     def _session_config(self) -> RequestSession:
         """Return the typed session configuration for Voice Live."""
+        options = {
+            "modalities": [Modality.TEXT, Modality.AUDIO],
+            "turn_detection": AzureSemanticVad(),
+            "input_audio_format": InputAudioFormat.PCM16,
+            "output_audio_format": OutputAudioFormat.PCM16,
+            "input_audio_noise_reduction": AudioNoiseReduction(
+                type="azure_deep_noise_suppression"
+            ),
+            "input_audio_echo_cancellation": AudioEchoCancellation(),
+            "voice": AzureStandardVoice(name=self.voice, temperature=0.8),
+        }
+        if not self.foundry_iq_enabled:
+            options["instructions"] = DIRECT_MODEL_INSTRUCTIONS
+
         return RequestSession(
-            modalities=[Modality.TEXT, Modality.AUDIO],
-            instructions="You are a helpful AI assistant responding in natural, engaging language.",
-            turn_detection=AzureSemanticVad(),
-            input_audio_format=InputAudioFormat.PCM16,
-            output_audio_format=OutputAudioFormat.PCM16,
-            input_audio_noise_reduction=AudioNoiseReduction(type="azure_deep_noise_suppression"),
-            input_audio_echo_cancellation=AudioEchoCancellation(),
-            voice=AzureStandardVoice(name="en-US-Aria:DragonHDLatestNeural", temperature=0.8),
+            **options,
         )
+
+    @staticmethod
+    def _mcp_result_count(output: str | None) -> int:
+        """Count result containers in an MCP response without logging their content."""
+        if not output:
+            return 0
+        try:
+            pending = [json.loads(output)]
+        except (TypeError, json.JSONDecodeError):
+            return -1
+
+        result_keys = {"results", "documents", "references", "citations"}
+        while pending:
+            value = pending.pop()
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key.lower() in result_keys and isinstance(child, list):
+                        return len(child)
+                    if isinstance(child, (dict, list)):
+                        pending.append(child)
+            elif isinstance(value, list):
+                pending.extend(value)
+        return -1
+
+    def _log_tool_event(
+        self, event, event_name: str, result_count: int | None = None
+    ) -> None:
+        """Log tool timing and outcome metadata without recording retrieved content."""
+        normalized = event_name.lower()
+        if "in_progress" in normalized:
+            self._tool_started_at = time.perf_counter()
+
+        status = "failed" if getattr(event, "error", None) is not None else "observed"
+        if "done" in normalized or "completed" in normalized:
+            status = "succeeded" if status != "failed" else status
+
+        if result_count is None:
+            result_count = getattr(event, "result_count", -1)
+        if not isinstance(result_count, int):
+            result_count = -1
+        duration_ms = (
+            (time.perf_counter() - self._tool_started_at) * 1000
+            if self._tool_started_at
+            else 0
+        )
+        empty = result_count == 0 if result_count >= 0 else "unknown"
+        telemetry_logger.info(
+            "[VoiceLive] foundry_iq_tool event=%s status=%s duration_ms=%.0f result_count=%s empty=%s",
+            event_name,
+            status,
+            duration_ms,
+            result_count,
+            empty,
+        )
+
+        if "done" in normalized or "completed" in normalized or status == "failed":
+            self._tool_started_at = None
 
     # ------------------------------------------------------------------
     # Voice Live connection
@@ -109,15 +189,51 @@ class VoiceLiveMediaHandler:
         t1 = time.perf_counter()
         logger.info("[VoiceLive] Credential prepared in %.2fs", t1 - t0)
 
-        self._conn_ctx = voicelive_connect(
-            endpoint=self.endpoint,
-            credential=credential,
-            model=self.model.strip(),
-        )
-        self.conn = await self._conn_ctx.__aenter__()
+        connection_options = {
+            "endpoint": self.endpoint,
+            "credential": credential,
+        }
+        if self.foundry_iq_enabled:
+            connection_options.update(
+                agent_name=self.foundry_agent_name,
+                project_name=self.foundry_project_name,
+                api_version="2026-07-15",
+            )
+            logger.info(
+                "[VoiceLive] agent_invocation status=starting agent=%s project=%s",
+                self.foundry_agent_name,
+                self.foundry_project_name,
+            )
+            telemetry_logger.info(
+                "[VoiceLive] agent_invocation status=starting agent=%s project=%s",
+                self.foundry_agent_name,
+                self.foundry_project_name,
+            )
+        else:
+            connection_options["model"] = self.model.strip()
+
+        try:
+            self._conn_ctx = voicelive_connect(**connection_options)
+            self.conn = await self._conn_ctx.__aenter__()
+        except Exception:
+            if self.foundry_iq_enabled:
+                logger.exception(
+                    "[VoiceLive] agent_invocation status=failed duration_ms=%.0f",
+                    (time.perf_counter() - t1) * 1000,
+                )
+                telemetry_logger.error(
+                    "[VoiceLive] agent_invocation status=failed duration_ms=%.0f",
+                    (time.perf_counter() - t1) * 1000,
+                )
+            raise
 
         t2 = time.perf_counter()
         logger.info("[VoiceLive] SDK connected in %.2fs (total %.2fs)", t2 - t1, t2 - t0)
+        if self.foundry_iq_enabled:
+            telemetry_logger.info(
+                "[VoiceLive] agent_invocation status=succeeded duration_ms=%.0f",
+                (t2 - t1) * 1000,
+            )
         self._voicelive_connected = True
 
         await self.conn.session.update(session=self._session_config())
@@ -158,6 +274,7 @@ class VoiceLiveMediaHandler:
 
                     case ServerEventType.INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
                         logger.info("[VoiceLive] Speech stopped")
+                        self._response_started_at = time.perf_counter()
 
                     case ServerEventType.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
                         transcript = event.transcript
@@ -178,15 +295,41 @@ class VoiceLiveMediaHandler:
                         logger.debug("[VoiceLive] AI: %s", transcript)
                         await self.on_transcript_done(transcript)
 
+                    case ServerEventType.RESPONSE_OUTPUT_ITEM_DONE:
+                        item = getattr(event, "item", None)
+                        if item and "mcp_call" in str(getattr(item, "type", "")).lower():
+                            self._log_tool_event(
+                                item,
+                                "response.mcp_call.output",
+                                self._mcp_result_count(getattr(item, "output", None)),
+                            )
+
                     case ServerEventType.RESPONSE_DONE:
                         response_id = event.response.id if hasattr(event, "response") else None
-                        logger.info("[VoiceLive] Response done: id=%s", response_id)
+                        logger.info(
+                            "[VoiceLive] Response done: id=%s end_to_end_latency_ms=%.0f",
+                            response_id,
+                            (time.perf_counter() - self._response_started_at) * 1000
+                            if self._response_started_at
+                            else 0,
+                        )
+                        telemetry_logger.info(
+                            "[VoiceLive] response status=completed end_to_end_latency_ms=%.0f",
+                            (time.perf_counter() - self._response_started_at) * 1000
+                            if self._response_started_at
+                            else 0,
+                        )
+                        self._response_started_at = None
 
                     case ServerEventType.ERROR:
                         logger.error("[VoiceLive] Error: %s", event.error)
 
                     case _:
-                        logger.debug("[VoiceLive] Event: %s", event_type)
+                        event_name = str(event_type)
+                        if "mcp" in event_name.lower() or "tool" in event_name.lower():
+                            self._log_tool_event(event, event_name)
+                        else:
+                            logger.debug("[VoiceLive] Event: %s", event_type)
         except asyncio.CancelledError:
             cancelled = True
             raise

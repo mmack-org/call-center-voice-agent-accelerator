@@ -9,6 +9,7 @@ the log messages where they are used.
 
 import contextvars
 import logging
+import os
 import uuid
 
 _correlation_id: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -52,3 +53,12 @@ def configure_logging(level: int = logging.INFO) -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level)
+
+    connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+    if connection_string:
+        from azure.monitor.opentelemetry import configure_azure_monitor
+
+        configure_azure_monitor(
+            connection_string=connection_string,
+            logger_name="telemetry",
+        )

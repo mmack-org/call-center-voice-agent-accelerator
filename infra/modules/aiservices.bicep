@@ -7,7 +7,7 @@ param modelName string
 param modelVersion string
 param modelDeploymentName string
 param modelSkuName string = 'GlobalStandard'
-param modelCapacity int = 1
+param modelCapacity int = 10
 
 @description('Voice Live API supported regions. See: https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live')
 @allowed([
@@ -35,6 +35,7 @@ param modelCapacity int = 1
 param location string = 'eastus2'
 var aiServicesName = 'aiServices-${environmentName}-${uniqueSuffix}'
 var projectName = 'project-${environmentName}-${uniqueSuffix}'
+var customSubDomainName = 'domain-${environmentName}-${uniqueSuffix}'
 
 @allowed([
   'S0'
@@ -60,7 +61,7 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
       defaultAction: 'Allow'
     }
     disableLocalAuth: disableLocalAuth
-    customSubDomainName: 'domain-${environmentName}-${uniqueSuffix}'
+    customSubDomainName: customSubDomainName
   }
 }
 
@@ -121,3 +122,4 @@ output projectName string = project.name
 output projectPrincipalId string = project.identity.principalId
 output projectConnectionName string = projectConnection.name
 output modelDeploymentName string = realtimeDeployment.name
+output projectEndpoint string = 'https://${customSubDomainName}.services.ai.azure.com/api/projects/${project.name}'

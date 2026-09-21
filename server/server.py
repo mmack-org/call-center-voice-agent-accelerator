@@ -30,8 +30,18 @@ app = Quart(__name__)
 app.config["AZURE_VOICE_LIVE_API_KEY"] = os.getenv("AZURE_VOICE_LIVE_API_KEY", "")
 app.config["AZURE_VOICE_LIVE_ENDPOINT"] = os.getenv("AZURE_VOICE_LIVE_ENDPOINT")
 app.config["VOICE_LIVE_MODEL"] = os.getenv("VOICE_LIVE_MODEL", "gpt-realtime")
+app.config["VOICE_LIVE_VOICE"] = os.getenv(
+    "VOICE_LIVE_VOICE", "fr-FR-DeniseNeural"
+)
 app.config["AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID"] = os.getenv(
     "AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID", ""
+)
+app.config["ENABLE_FOUNDRY_IQ"] = os.getenv("ENABLE_FOUNDRY_IQ", "false")
+app.config["AZURE_AI_FOUNDRY_PROJECT_NAME"] = os.getenv(
+    "AZURE_AI_FOUNDRY_PROJECT_NAME", ""
+)
+app.config["AZURE_AI_FOUNDRY_AGENT_ID"] = os.getenv(
+    "AZURE_AI_FOUNDRY_AGENT_ID", ""
 )
 app.config["AMBIENT_PRESET"] = os.getenv("AMBIENT_PRESET", "none")
 
