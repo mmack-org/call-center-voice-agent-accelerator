@@ -8,6 +8,7 @@ param identityClientId string
 param containerRegistryName string
 param aiServicesEndpoint string
 param modelDeploymentName string
+param voiceName string = 'fr-FR-DeniseNeural'
 param enableFoundryAgent bool = false
 param foundryProjectName string = ''
 param foundryAgentName string = ''
@@ -159,6 +160,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             {
               name: 'VOICE_LIVE_MODEL'
               value: modelDeploymentName
+            }
+            {
+              name: 'VOICE_LIVE_VOICE'
+              value: voiceName
             }
             {
               name: 'ENABLE_FOUNDRY_IQ'

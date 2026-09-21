@@ -1,27 +1,33 @@
 param location string
-param environmentName string
-param uniqueSuffix string
 param tags object
 param aiServicesName string
 param aiServicesId string
 param projectName string
 param projectEndpoint string
 param projectPrincipalId string
+param deploymentPrincipalId string
+param deploymentPrincipalType string
+param storageAccountName string
+param storageContainerName string
 param agentModelName string
 param agentModelVersion string
 param agentModelDeploymentName string
 param agentModelSkuName string
 param agentModelCapacity int
+param ingestionChatModelName string
+param ingestionChatModelDeploymentName string
+param ingestionChatModelCapacity int
+param ingestionEmbeddingModelName string
+param ingestionEmbeddingModelDeploymentName string
+param ingestionEmbeddingModelCapacity int
 param searchServiceName string
-param searchIndexName string
 param knowledgeBaseName string
 param agentName string
 
-var knowledgeSourceName = '${knowledgeBaseName}-source'
+var knowledgeSourceName = knowledgeBaseName
 var connectionName = '${knowledgeBaseName}-connection'
 var searchEndpoint = 'https://${searchService.name}.search.windows.net'
 var mcpEndpoint = '${searchEndpoint}/knowledgebases/${knowledgeBaseName}/mcp?api-version=2026-08-01-preview'
-var provisioningIdentityName = take('id-iq-${environmentName}-${uniqueSuffix}', 128)
 
 resource searchService 'Microsoft.Search/searchServices@2025-05-01' = {
   name: searchServiceName
@@ -34,17 +40,44 @@ resource searchService 'Microsoft.Search/searchServices@2025-05-01' = {
     name: 'basic'
   }
   properties: {
-    authOptions: {
-      aadOrApiKey: {
-        aadAuthFailureMode: 'http401WithBearerChallenge'
-      }
-    }
     disableLocalAuth: true
     hostingMode: 'Default'
     publicNetworkAccess: 'enabled'
     replicaCount: 1
     partitionCount: 1
     semanticSearch: 'free'
+  }
+}
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' = {
+  name: storageAccountName
+  location: location
+  tags: tags
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
+  properties: {
+    accessTier: 'Hot'
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
+    defaultToOAuthAuthentication: true
+    minimumTlsVersion: 'TLS1_2'
+    publicNetworkAccess: 'Enabled'
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2025-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource contentContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2025-01-01' = {
+  parent: blobService
+  name: storageContainerName
+  properties: {
+    publicAccess: 'None'
   }
 }
 
@@ -75,6 +108,46 @@ resource agentModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@
   }
 }
 
+resource ingestionChatModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+  parent: aiServices
+  name: ingestionChatModelDeploymentName
+  sku: {
+    name: 'GlobalStandard'
+    capacity: ingestionChatModelCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: ingestionChatModelName
+    }
+    raiPolicyName: 'Microsoft.Default'
+    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
+  }
+  dependsOn: [
+    agentModelDeployment
+  ]
+}
+
+resource ingestionEmbeddingModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+  parent: aiServices
+  name: ingestionEmbeddingModelDeploymentName
+  sku: {
+    name: 'GlobalStandard'
+    capacity: ingestionEmbeddingModelCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: ingestionEmbeddingModelName
+    }
+    raiPolicyName: 'Microsoft.Default'
+    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
+  }
+  dependsOn: [
+    ingestionChatModelDeployment
+  ]
+}
+
 resource projectConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview' = {
   parent: project
   name: connectionName
@@ -92,10 +165,34 @@ resource projectConnection 'Microsoft.CognitiveServices/accounts/projects/connec
   }
 }
 
-resource provisioningIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: provisioningIdentityName
-  location: location
-  tags: tags
+resource searchStorageReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, searchService.id, 'Storage Blob Data Reader')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+    principalId: searchService.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource searchOpenAIUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServices.id, searchService.id, 'Cognitive Services OpenAI User')
+  scope: aiServices
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
+    principalId: searchService.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource searchFoundryToolsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServices.id, searchService.id, 'Cognitive Services User')
+  scope: aiServices
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')
+    principalId: searchService.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
 }
 
 resource projectSearchReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -108,102 +205,54 @@ resource projectSearchReader 'Microsoft.Authorization/roleAssignments@2022-04-01
   }
 }
 
-resource provisionerSearchServiceContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(searchService.id, provisioningIdentity.id, 'Search Service Contributor')
+resource deploymentPrincipalStorageContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, deploymentPrincipalId, 'Storage Blob Data Contributor')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: deploymentPrincipalId
+    principalType: deploymentPrincipalType
+  }
+}
+
+resource deploymentPrincipalSearchServiceContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(searchService.id, deploymentPrincipalId, 'Search Service Contributor')
   scope: searchService
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7ca78c08-252a-4471-8644-bb5ff32d4ba0')
-    principalId: provisioningIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
+    principalId: deploymentPrincipalId
+    principalType: deploymentPrincipalType
   }
 }
 
-resource provisionerSearchDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(searchService.id, provisioningIdentity.id, 'Search Index Data Contributor')
+resource deploymentPrincipalSearchDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(searchService.id, deploymentPrincipalId, 'Search Index Data Contributor')
   scope: searchService
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7')
-    principalId: provisioningIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
+    principalId: deploymentPrincipalId
+    principalType: deploymentPrincipalType
   }
 }
 
-resource provisionerFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiServicesId, provisioningIdentity.id, 'Foundry User')
+resource deploymentPrincipalFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServicesId, deploymentPrincipalId, 'Foundry User')
   scope: aiServices
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '53ca6127-db72-4b80-b1b0-d745d6d5456d')
-    principalId: provisioningIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
+    principalId: deploymentPrincipalId
+    principalType: deploymentPrincipalType
   }
-}
-
-resource provisionFoundryIq 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
-  name: 'provision-foundry-iq-${uniqueSuffix}'
-  location: location
-  tags: tags
-  kind: 'AzureCLI'
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${provisioningIdentity.id}': {}
-    }
-  }
-  properties: {
-    azCliVersion: '2.76.0'
-    cleanupPreference: 'OnSuccess'
-    retentionInterval: 'P1D'
-    timeout: 'PT30M'
-    forceUpdateTag: uniqueString(loadTextContent('../scripts/provision-foundry-iq.sh'))
-    environmentVariables: [
-      {
-        name: 'SEARCH_ENDPOINT'
-        value: searchEndpoint
-      }
-      {
-        name: 'SEARCH_INDEX_NAME'
-        value: searchIndexName
-      }
-      {
-        name: 'KNOWLEDGE_SOURCE_NAME'
-        value: knowledgeSourceName
-      }
-      {
-        name: 'KNOWLEDGE_BASE_NAME'
-        value: knowledgeBaseName
-      }
-      {
-        name: 'PROJECT_ENDPOINT'
-        value: projectEndpoint
-      }
-      {
-        name: 'PROJECT_CONNECTION_NAME'
-        value: projectConnection.name
-      }
-      {
-        name: 'AGENT_NAME'
-        value: agentName
-      }
-      {
-        name: 'AGENT_MODEL_DEPLOYMENT'
-        value: agentModelDeployment.name
-      }
-    ]
-    scriptContent: loadTextContent('../scripts/provision-foundry-iq.sh')
-  }
-  dependsOn: [
-    projectSearchReader
-    provisionerSearchServiceContributor
-    provisionerSearchDataContributor
-    provisionerFoundryUser
-  ]
 }
 
 output searchServiceName string = searchService.name
 output searchEndpoint string = searchEndpoint
-output searchIndexName string = searchIndexName
+output storageAccountName string = storageAccount.name
+output storageContainerName string = contentContainer.name
 output knowledgeBaseName string = knowledgeBaseName
 output knowledgeSourceName string = knowledgeSourceName
 output projectConnectionName string = projectConnection.name
 output agentName string = agentName
 output agentModelDeploymentName string = agentModelDeployment.name
+output ingestionChatModelDeploymentName string = ingestionChatModelDeployment.name
+output ingestionEmbeddingModelDeploymentName string = ingestionEmbeddingModelDeployment.name

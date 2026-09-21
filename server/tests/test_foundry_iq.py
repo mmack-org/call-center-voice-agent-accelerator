@@ -43,6 +43,7 @@ def make_config(enabled):
     return {
         "AZURE_VOICE_LIVE_ENDPOINT": "https://example.services.ai.azure.com",
         "VOICE_LIVE_MODEL": "gpt-realtime",
+        "VOICE_LIVE_VOICE": "fr-FR-DeniseNeural",
         "AZURE_VOICE_LIVE_API_KEY": "test-key",
         "AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID": "",
         "ENABLE_FOUNDRY_IQ": str(enabled).lower(),
@@ -101,6 +102,23 @@ class FoundryIqConfigurationTests(unittest.TestCase):
         self.assertEqual(captured["project_name"], "project-test")
         self.assertEqual(captured["api_version"], "2026-07-15")
         self.assertNotIn("model", captured)
+
+    def test_default_session_uses_french_prompt_and_voice(self):
+        handler = VoiceLiveMediaHandler(make_config(False))
+
+        session = handler._session_config()
+
+        self.assertIn("centre d'appels", session.instructions)
+        self.assertIn("français", session.instructions)
+        self.assertEqual(session.voice.name, "fr-FR-DeniseNeural")
+
+    def test_agent_session_does_not_override_foundry_instructions(self):
+        handler = VoiceLiveMediaHandler(make_config(True))
+
+        session = handler._session_config()
+
+        self.assertIsNone(session.instructions)
+        self.assertEqual(session.voice.name, "fr-FR-DeniseNeural")
 
     def test_agent_connection_failure_is_reported(self):
         handler = VoiceLiveMediaHandler(make_config(True))

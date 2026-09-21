@@ -22,6 +22,16 @@ hooks:
     run: ./hooks/preprovision.ps1
     interactive: true
     continueOnError: false
+  postprovision:
+    - name: deploy-aisearch-config
+      shell: pwsh
+      run: ./hooks/deploy-aisearch-iq-config.ps1
+      interactive: true
+      continueOnError: false
+    - name: configure-foundry-agent
+      shell: pwsh
+      run: ./hooks/postprovision.ps1
+      continueOnError: false
   predeploy:
     shell: pwsh
     run: ./hooks/predeploy.ps1
@@ -39,6 +49,7 @@ pipeline:
     - SERVICE_API_ENDPOINTS
     - AZURE_VOICE_LIVE_ENDPOINT
     - AZURE_VOICE_LIVE_MODEL
+    - AZURE_VOICE_LIVE_VOICE
     - AZURE_VOICE_LIVE_DEPLOYMENT_NAME
     - AZURE_VOICE_LIVE_MODEL_NAME
     - AZURE_VOICE_LIVE_MODEL_VERSION
@@ -51,9 +62,18 @@ pipeline:
     - ENABLE_FOUNDRY_IQ
     - AZURE_AI_SEARCH_SERVICE_NAME
     - AZURE_AI_SEARCH_ENDPOINT
-    - AZURE_AI_SEARCH_INDEX_NAME
+    - AZURE_SEARCH_ENDPOINT
+    - AZURE_FOUNDRY_ENDPOINT
+    - AZURE_STORAGE_ACCOUNT_NAME
+    - AZURE_STORAGE_CONTAINER_NAME
     - AZURE_FOUNDRY_IQ_KNOWLEDGE_BASE_NAME
     - AZURE_FOUNDRY_IQ_CONNECTION_NAME
+    - AZURE_FOUNDRY_IQ_CHAT_MODEL_NAME
+    - AZURE_FOUNDRY_IQ_CHAT_MODEL_DEPLOYMENT
+    - AZURE_FOUNDRY_IQ_CHAT_MODEL_CAPACITY
+    - AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_NAME
+    - AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_DEPLOYMENT
+    - AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_CAPACITY
     - AZURE_AI_FOUNDRY_AGENT_ID
     - AZURE_AI_AGENT_MODEL_NAME
     - AZURE_AI_AGENT_MODEL_VERSION

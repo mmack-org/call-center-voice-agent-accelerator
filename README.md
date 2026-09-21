@@ -506,7 +506,8 @@ This accelerator can provision a Foundry agent with a Foundry IQ knowledge
 base and route every browser and telephony session to it. The feature is
 disabled by default so the existing direct realtime-model path remains
 unchanged. See [Foundry IQ knowledge for voice calls](./docs/foundry-iq.md) for
-deployment, sample ingestion, validation, security, and troubleshooting.
+deployment, automatic Blob Storage ingestion, validation, security, and
+troubleshooting.
 
 For detailed Voice Live agent configuration options, refer to the official documentation:
 

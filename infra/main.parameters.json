@@ -11,6 +11,12 @@
     "appExists": {
       "value": "${SERVICE_APP_RESOURCE_EXISTS=false}"
     },
+    "principalId": {
+      "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "principalType": {
+      "value": "${AZURE_PRINCIPAL_TYPE}"
+    },
     "modelName": {
       "value": "${AZURE_VOICE_LIVE_MODEL_NAME=gpt-realtime-2.1}"
     },
@@ -20,11 +26,14 @@
     "modelDeploymentName": {
       "value": "${AZURE_VOICE_LIVE_DEPLOYMENT_NAME=gpt-realtime}"
     },
+    "voiceName": {
+      "value": "${AZURE_VOICE_LIVE_VOICE=fr-FR-DeniseNeural}"
+    },
     "modelSkuName": {
       "value": "${AZURE_VOICE_LIVE_MODEL_SKU=GlobalStandard}"
     },
     "modelCapacity": {
-      "value": "${AZURE_VOICE_LIVE_MODEL_CAPACITY=1}"
+      "value": "${AZURE_VOICE_LIVE_MODEL_CAPACITY=10}"
     },
     "telephonyProvider": {
       "value": "${TELEPHONY_PROVIDER=acs}"
@@ -68,8 +77,11 @@
     "searchServiceName": {
       "value": "${AZURE_AI_SEARCH_SERVICE_NAME=}"
     },
-    "searchIndexName": {
-      "value": "${AZURE_AI_SEARCH_INDEX_NAME=call-center-content}"
+    "foundryIqStorageAccountName": {
+      "value": "${AZURE_STORAGE_ACCOUNT_NAME=}"
+    },
+    "foundryIqStorageContainerName": {
+      "value": "${AZURE_STORAGE_CONTAINER_NAME=aisindexer}"
     },
     "foundryIqKnowledgeBaseName": {
       "value": "${AZURE_FOUNDRY_IQ_KNOWLEDGE_BASE_NAME=call-center-knowledge}"
@@ -90,7 +102,25 @@
       "value": "${AZURE_AI_AGENT_MODEL_SKU=GlobalStandard}"
     },
     "agentModelCapacity": {
-      "value": "${AZURE_AI_AGENT_MODEL_CAPACITY=10}"
+      "value": "${AZURE_AI_AGENT_MODEL_CAPACITY=15000}"
+    },
+    "foundryIqChatModelName": {
+      "value": "${AZURE_FOUNDRY_IQ_CHAT_MODEL_NAME=gpt-5.2}"
+    },
+    "foundryIqChatModelDeploymentName": {
+      "value": "${AZURE_FOUNDRY_IQ_CHAT_MODEL_DEPLOYMENT=gpt-5.2}"
+    },
+    "foundryIqChatModelCapacity": {
+      "value": "${AZURE_FOUNDRY_IQ_CHAT_MODEL_CAPACITY=1000}"
+    },
+    "foundryIqEmbeddingModelName": {
+      "value": "${AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_NAME=text-embedding-3-large}"
+    },
+    "foundryIqEmbeddingModelDeploymentName": {
+      "value": "${AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_DEPLOYMENT=text-embedding-3-large}"
+    },
+    "foundryIqEmbeddingModelCapacity": {
+      "value": "${AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_CAPACITY=3000}"
     }
   }
 }

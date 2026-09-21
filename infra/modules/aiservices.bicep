@@ -7,7 +7,7 @@ param modelName string
 param modelVersion string
 param modelDeploymentName string
 param modelSkuName string = 'GlobalStandard'
-param modelCapacity int = 1
+param modelCapacity int = 10
 
 @description('Voice Live API supported regions. See: https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=voice-live')
 @allowed([

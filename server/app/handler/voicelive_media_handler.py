@@ -38,6 +38,13 @@ telemetry_logger = logging.getLogger("telemetry.voicelive")
 
 # Default chunk size in bytes (100ms of audio at 24kHz, 16-bit mono)
 DEFAULT_CHUNK_SIZE = 4800  # 24000 samples/sec * 0.1 sec * 2 bytes
+DEFAULT_VOICE = "fr-FR-DeniseNeural"
+DIRECT_MODEL_INSTRUCTIONS = (
+    "Vous êtes un agent de support de centre d'appels. Répondez en français "
+    "par défaut, de façon claire, concise, naturelle et adaptée à un échange "
+    "téléphonique. Posez une question de clarification lorsque la demande est "
+    "ambiguë et n'inventez pas d'information."
+)
 
 
 class VoiceLiveMediaHandler:
@@ -59,6 +66,7 @@ class VoiceLiveMediaHandler:
         )
         self.foundry_project_name = config.get("AZURE_AI_FOUNDRY_PROJECT_NAME", "")
         self.foundry_agent_name = config.get("AZURE_AI_FOUNDRY_AGENT_ID", "")
+        self.voice = config.get("VOICE_LIVE_VOICE", DEFAULT_VOICE)
         self.conn = None
         self._conn_ctx = None  # async context manager from SDK connect()
         self._credential = None  # kept alive for token refresh
@@ -89,15 +97,22 @@ class VoiceLiveMediaHandler:
 
     def _session_config(self) -> RequestSession:
         """Return the typed session configuration for Voice Live."""
+        options = {
+            "modalities": [Modality.TEXT, Modality.AUDIO],
+            "turn_detection": AzureSemanticVad(),
+            "input_audio_format": InputAudioFormat.PCM16,
+            "output_audio_format": OutputAudioFormat.PCM16,
+            "input_audio_noise_reduction": AudioNoiseReduction(
+                type="azure_deep_noise_suppression"
+            ),
+            "input_audio_echo_cancellation": AudioEchoCancellation(),
+            "voice": AzureStandardVoice(name=self.voice, temperature=0.8),
+        }
+        if not self.foundry_iq_enabled:
+            options["instructions"] = DIRECT_MODEL_INSTRUCTIONS
+
         return RequestSession(
-            modalities=[Modality.TEXT, Modality.AUDIO],
-            instructions="You are a helpful AI assistant responding in natural, engaging language.",
-            turn_detection=AzureSemanticVad(),
-            input_audio_format=InputAudioFormat.PCM16,
-            output_audio_format=OutputAudioFormat.PCM16,
-            input_audio_noise_reduction=AudioNoiseReduction(type="azure_deep_noise_suppression"),
-            input_audio_echo_cancellation=AudioEchoCancellation(),
-            voice=AzureStandardVoice(name="en-US-Aria:DragonHDLatestNeural", temperature=0.8),
+            **options,
         )
 
     @staticmethod
