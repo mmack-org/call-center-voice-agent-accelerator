@@ -130,9 +130,9 @@ complete configuration and upgrade procedure.
 
 ## Foundry IQ Provisioning or Retrieval Failures
 
-Foundry IQ is optional. If `ENABLE_FOUNDRY_IQ=true`, `azd up` also provisions
-Blob Storage, Azure AI Search, ingestion and agent model deployments, a
-knowledge base, and a grounded prompt agent. Common causes of failure include:
+Every `azd up` provisions Blob Storage, Azure AI Search, ingestion and agent
+model deployments, a knowledge base, and a grounded prompt agent. Common causes
+of failure include:
 
 - missing Search, Storage, or Foundry data-plane roles for the deploying
   identity

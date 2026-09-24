@@ -1,10 +1,10 @@
 # Foundry IQ knowledge for voice calls
 
-Foundry IQ is optional. When enabled, all browser and telephony calls use a
+Foundry IQ is deployed by default. All browser and telephony calls use a
 Foundry prompt agent whose MCP tool retrieves grounded content from Azure AI
-Search. When disabled (the default), calls continue to use the GPT Realtime
-deployment directly. Both modes answer in French by default and use the
-`fr-FR-DeniseNeural` voice.
+Search. The agent also receives a Fabric Data Agent retrieval tool and a
+separate confirmed support-ticket function. Calls answer in French by default
+and use the `fr-FR-DeniseNeural` voice.
 
 ## Architecture
 
@@ -49,7 +49,6 @@ Review preview terms and compliance requirements before production use.
 ## Deploy
 
 ```shell
-azd env set ENABLE_FOUNDRY_IQ true
 azd up
 ```
 
@@ -81,14 +80,6 @@ the Foundry agent that uses the Bicep-provisioned MCP project connection.
 Repeated deployments reconcile the same named resources and create a new
 agent version only when its definition changes. The generated managed Search
 index name is saved as `AZURE_AI_SEARCH_INDEX_NAME` in the azd environment.
-
-To return to direct-model mode:
-
-```shell
-azd env set ENABLE_FOUNDRY_IQ false
-azd provision
-azd deploy
-```
 
 ## Content ingestion
 

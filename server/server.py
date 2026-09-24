@@ -43,6 +43,12 @@ app.config["AZURE_AI_FOUNDRY_PROJECT_NAME"] = os.getenv(
 app.config["AZURE_AI_FOUNDRY_AGENT_ID"] = os.getenv(
     "AZURE_AI_FOUNDRY_AGENT_ID", ""
 )
+app.config["FABRIC_WORKSPACE_ID"] = os.getenv("FABRIC_WORKSPACE_ID", "")
+app.config["FABRIC_DATA_AGENT_ID"] = os.getenv("FABRIC_DATA_AGENT_ID", "")
+app.config["FABRIC_TICKET_WRITE_ENDPOINT"] = os.getenv(
+    "FABRIC_TICKET_WRITE_ENDPOINT", ""
+)
+app.config["AUTHORIZED_CUSTOMER_KEY"] = os.getenv("AUTHORIZED_CUSTOMER_KEY", "")
 app.config["AMBIENT_PRESET"] = os.getenv("AMBIENT_PRESET", "none")
 
 # Log ambient configuration on startup

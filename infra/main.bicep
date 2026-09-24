@@ -87,8 +87,6 @@ param bandwidthAccountId string = ''
 param bandwidthApplicationId string = ''
 @description('Enable debug mode for verbose logging in the container app')
 param debugMode bool = false
-@description('Provision Azure AI Search, Foundry IQ sample knowledge, and a grounded Foundry agent.')
-param enableFoundryIq bool = false
 @description('Azure AI Search service name. Leave empty to generate a deterministic name.')
 param searchServiceName string = ''
 @description('Storage account used as the Foundry IQ content source. Leave empty to generate a deterministic name.')
@@ -124,6 +122,18 @@ param foundryIqEmbeddingModelDeploymentName string = 'text-embedding-3-large'
 @minValue(10)
 @description('Foundry IQ embedding deployment capacity in thousands of tokens per minute.')
 param foundryIqEmbeddingModelCapacity int = 3000
+@description('Microsoft Fabric capacity location. It must support the selected Fabric SKU.')
+param fabricLocation string = location
+@description('Microsoft Fabric capacity SKU.')
+param fabricCapacitySku string = 'F2'
+@description('Microsoft Fabric capacity administrator UPN.')
+param fabricCapacityAdmin string
+@description('Microsoft Fabric workspace display name. Leave empty to generate a deterministic name.')
+param fabricWorkspaceName string = ''
+@description('Microsoft Fabric Lakehouse display name.')
+param fabricLakehouseName string = 'call_center'
+@description('Microsoft Fabric Data Agent display name.')
+param fabricDataAgentName string = 'call-center-data-agent'
 
 var uniqueSuffix = substring(uniqueString(subscription().id, environmentName), 0, 5)
 var tags = {
@@ -194,7 +204,7 @@ module aiServices 'modules/aiservices.bicep' = {
 var generatedSearchServiceName = take(toLower(replace('srch-${environmentName}-${uniqueSuffix}', '_', '-')), 60)
 var foundryIqStorageNamePrefix = take(toLower(replace(replace(replace('st${environmentName}', '-', ''), '_', ''), ' ', '')), 24 - length(uniqueSuffix))
 var generatedFoundryIqStorageAccountName = '${foundryIqStorageNamePrefix}${uniqueSuffix}'
-module foundryIq 'modules/foundryiq.bicep' = if (enableFoundryIq) {
+module foundryIq 'modules/foundryiq.bicep' = {
   name: 'foundry-iq'
   scope: rg
   params: {
@@ -223,6 +233,20 @@ module foundryIq 'modules/foundryiq.bicep' = if (enableFoundryIq) {
     searchServiceName: empty(searchServiceName) ? generatedSearchServiceName : searchServiceName
     knowledgeBaseName: foundryIqKnowledgeBaseName
     agentName: foundryAgentName
+  }
+}
+
+var generatedFabricCapacityName = take(toLower(replace('fc-${environmentName}-${uniqueSuffix}', '_', '-')), 63)
+var generatedFabricWorkspaceName = take('call-center-${sanitizedEnvName}-${uniqueSuffix}', 256)
+module fabric 'modules/fabric.bicep' = {
+  name: 'fabric'
+  scope: rg
+  params: {
+    capacityName: generatedFabricCapacityName
+    location: fabricLocation
+    skuName: fabricCapacitySku
+    administrator: fabricCapacityAdmin
+    tags: tags
   }
 }
 
@@ -285,9 +309,9 @@ module containerapp 'modules/containerapp.bicep' = {
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
     modelDeploymentName: aiServices.outputs.modelDeploymentName
     voiceName: voiceName
-    enableFoundryAgent: enableFoundryIq
+    enableFoundryAgent: true
     foundryProjectName: aiServices.outputs.projectName
-    foundryAgentName: enableFoundryIq ? foundryIq.outputs.agentName : ''
+    foundryAgentName: foundryIq.outputs.agentName
     acsConnectionStringSecretUri: keyvault.outputs.acsConnectionStringUri
     twilioAuthTokenSecretUri: keyvault.outputs.twilioAuthTokenUri
     infobipApiKeySecretUri: keyvault.outputs.infobipApiKeyUri
@@ -316,6 +340,7 @@ output AZURE_USER_ASSIGNED_IDENTITY_ID string = appIdentity.outputs.identityId
 output AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID string = appIdentity.outputs.clientId
 
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.outputs.loginServer
+output AZURE_CONTAINER_APP_NAME string = containerapp.outputs.containerAppName
 
 // Provider endpoint mapping — add new providers here
 var providerEndpoints = {
@@ -334,22 +359,27 @@ output AZURE_AI_FOUNDRY_PROJECT_ID string = aiServices.outputs.projectId
 output AZURE_AI_FOUNDRY_PROJECT_NAME string = aiServices.outputs.projectName
 output AZURE_AI_FOUNDRY_PROJECT_ENDPOINT string = aiServices.outputs.projectEndpoint
 output AZURE_AI_FOUNDRY_CONNECTION_NAME string = aiServices.outputs.projectConnectionName
-output ENABLE_FOUNDRY_IQ bool = enableFoundryIq
-output AZURE_AI_SEARCH_SERVICE_NAME string = enableFoundryIq ? foundryIq.outputs.searchServiceName : ''
-output AZURE_AI_SEARCH_ENDPOINT string = enableFoundryIq ? foundryIq.outputs.searchEndpoint : ''
-output AZURE_SEARCH_ENDPOINT string = enableFoundryIq ? foundryIq.outputs.searchEndpoint : ''
+output ENABLE_FOUNDRY_IQ bool = true
+output AZURE_AI_SEARCH_SERVICE_NAME string = foundryIq.outputs.searchServiceName
+output AZURE_AI_SEARCH_ENDPOINT string = foundryIq.outputs.searchEndpoint
+output AZURE_SEARCH_ENDPOINT string = foundryIq.outputs.searchEndpoint
 output AZURE_FOUNDRY_ENDPOINT string = aiServices.outputs.aiServicesEndpoint
-output AZURE_STORAGE_ACCOUNT_NAME string = enableFoundryIq ? foundryIq.outputs.storageAccountName : ''
-output AZURE_STORAGE_CONTAINER_NAME string = enableFoundryIq ? foundryIq.outputs.storageContainerName : ''
-output AZURE_FOUNDRY_IQ_KNOWLEDGE_BASE_NAME string = enableFoundryIq ? foundryIq.outputs.knowledgeBaseName : ''
-output AZURE_FOUNDRY_IQ_CONNECTION_NAME string = enableFoundryIq ? foundryIq.outputs.projectConnectionName : ''
+output AZURE_STORAGE_ACCOUNT_NAME string = foundryIq.outputs.storageAccountName
+output AZURE_STORAGE_CONTAINER_NAME string = foundryIq.outputs.storageContainerName
+output AZURE_FOUNDRY_IQ_KNOWLEDGE_BASE_NAME string = foundryIq.outputs.knowledgeBaseName
+output AZURE_FOUNDRY_IQ_CONNECTION_NAME string = foundryIq.outputs.projectConnectionName
 output AZURE_FOUNDRY_IQ_CHAT_MODEL_NAME string = foundryIqChatModelName
-output AZURE_FOUNDRY_IQ_CHAT_MODEL_DEPLOYMENT string = enableFoundryIq ? foundryIq.outputs.ingestionChatModelDeploymentName : ''
+output AZURE_FOUNDRY_IQ_CHAT_MODEL_DEPLOYMENT string = foundryIq.outputs.ingestionChatModelDeploymentName
 output AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_NAME string = foundryIqEmbeddingModelName
-output AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_DEPLOYMENT string = enableFoundryIq ? foundryIq.outputs.ingestionEmbeddingModelDeploymentName : ''
-output AZURE_AI_FOUNDRY_AGENT_ID string = enableFoundryIq ? foundryIq.outputs.agentName : ''
+output AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_DEPLOYMENT string = foundryIq.outputs.ingestionEmbeddingModelDeploymentName
+output AZURE_AI_FOUNDRY_AGENT_ID string = foundryIq.outputs.agentName
 output AZURE_AI_AGENT_MODEL_NAME string = agentModelName
 output AZURE_AI_AGENT_MODEL_VERSION string = agentModelVersion
 output AZURE_AI_AGENT_MODEL_DEPLOYMENT string = agentModelDeploymentName
 output AZURE_VOICE_LIVE_MODEL_NAME string = modelName
 output AZURE_VOICE_LIVE_MODEL_VERSION string = modelVersion
+output FABRIC_CAPACITY_ID string = fabric.outputs.capacityId
+output FABRIC_CAPACITY_NAME string = fabric.outputs.capacityName
+output FABRIC_WORKSPACE_NAME string = empty(fabricWorkspaceName) ? generatedFabricWorkspaceName : fabricWorkspaceName
+output FABRIC_LAKEHOUSE_NAME string = fabricLakehouseName
+output FABRIC_DATA_AGENT_NAME string = fabricDataAgentName

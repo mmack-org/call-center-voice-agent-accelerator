@@ -28,6 +28,25 @@ if (-not $account) {
 }
 Write-Host "Subscription: $($account.name) ($($account.id))" -ForegroundColor Green
 
+$fabricAdmin = azd env get-value FABRIC_CAPACITY_ADMIN 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($fabricAdmin)) {
+    $fabricAdmin = $account.user.name
+    if ([string]::IsNullOrWhiteSpace($fabricAdmin)) {
+        Write-Host "ERROR: FABRIC_CAPACITY_ADMIN must be set to a Fabric administrator UPN." -ForegroundColor Red
+        exit 1
+    }
+    azd env set FABRIC_CAPACITY_ADMIN $fabricAdmin
+}
+$fabricLocation = azd env get-value FABRIC_LOCATION 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($fabricLocation)) {
+    $fabricLocation = azd env get-value AZURE_LOCATION 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($fabricLocation)) {
+        Write-Host "ERROR: FABRIC_LOCATION or AZURE_LOCATION must be set." -ForegroundColor Red
+        exit 1
+    }
+    azd env set FABRIC_LOCATION $fabricLocation
+}
+
 # --- Model selection and availability validation ---
 $modelName = azd env get-value AZURE_VOICE_LIVE_MODEL_NAME 2>$null
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($modelName)) {

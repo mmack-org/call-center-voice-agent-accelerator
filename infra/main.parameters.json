@@ -71,9 +71,6 @@
     "debugMode": {
       "value": "${DEBUG_MODE=false}"
     },
-    "enableFoundryIq": {
-      "value": "${ENABLE_FOUNDRY_IQ=false}"
-    },
     "searchServiceName": {
       "value": "${AZURE_AI_SEARCH_SERVICE_NAME=}"
     },
@@ -121,6 +118,24 @@
     },
     "foundryIqEmbeddingModelCapacity": {
       "value": "${AZURE_FOUNDRY_IQ_EMBEDDING_MODEL_CAPACITY=3000}"
+    },
+    "fabricLocation": {
+      "value": "${FABRIC_LOCATION}"
+    },
+    "fabricCapacitySku": {
+      "value": "${FABRIC_CAPACITY_SKU=F2}"
+    },
+    "fabricCapacityAdmin": {
+      "value": "${FABRIC_CAPACITY_ADMIN}"
+    },
+    "fabricWorkspaceName": {
+      "value": "${FABRIC_WORKSPACE_NAME=}"
+    },
+    "fabricLakehouseName": {
+      "value": "${FABRIC_LAKEHOUSE_NAME=call_center}"
+    },
+    "fabricDataAgentName": {
+      "value": "${FABRIC_DATA_AGENT_NAME=call-center-data-agent}"
     }
   }
 }

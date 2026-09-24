@@ -29,6 +29,7 @@ from azure.ai.voicelive.models import (
 )
 
 from .ambient_mixer import AmbientMixer
+from ..fabric_tools import FabricHttpBackend, FabricToolService
 
 # Data type for WebSocket messages (str or bytes) sent to client
 Data = Union[str, bytes]
@@ -66,6 +67,21 @@ class VoiceLiveMediaHandler:
         )
         self.foundry_project_name = config.get("AZURE_AI_FOUNDRY_PROJECT_NAME", "")
         self.foundry_agent_name = config.get("AZURE_AI_FOUNDRY_AGENT_ID", "")
+        self.authorized_customer_key = config.get("AUTHORIZED_CUSTOMER_KEY", "")
+        self.fabric_tools = None
+        if (
+            config.get("FABRIC_WORKSPACE_ID")
+            and config.get("FABRIC_DATA_AGENT_ID")
+            and config.get("FABRIC_TICKET_WRITE_ENDPOINT")
+        ):
+            self.fabric_tools = FabricToolService(
+                FabricHttpBackend(
+                    workspace_id=config["FABRIC_WORKSPACE_ID"],
+                    data_agent_id=config["FABRIC_DATA_AGENT_ID"],
+                    ticket_write_endpoint=config["FABRIC_TICKET_WRITE_ENDPOINT"],
+                    client_id=self.client_id,
+                )
+            )
         self.voice = config.get("VOICE_LIVE_VOICE", DEFAULT_VOICE)
         self.conn = None
         self._conn_ctx = None  # async context manager from SDK connect()
@@ -326,7 +342,9 @@ class VoiceLiveMediaHandler:
 
                     case _:
                         event_name = str(event_type)
-                        if "mcp" in event_name.lower() or "tool" in event_name.lower():
+                        if "function_call_arguments_done" in event_name.lower():
+                            await self._handle_function_call(event)
+                        elif "mcp" in event_name.lower() or "tool" in event_name.lower():
                             self._log_tool_event(event, event_name)
                         else:
                             logger.debug("[VoiceLive] Event: %s", event_type)
@@ -353,6 +371,39 @@ class VoiceLiveMediaHandler:
     async def init_websocket(self, socket):
         """Sets up the client WebSocket."""
         self.client_ws = socket
+
+    async def _handle_function_call(self, event) -> None:
+        """Execute the only supported write tool and return its result to the agent."""
+        name = getattr(event, "name", "")
+        call_id = getattr(event, "call_id", "")
+        if name != "create_support_ticket":
+            logger.warning("[VoiceLive] Rejected unsupported function tool=%s", name)
+            return
+        if not self.fabric_tools or not self.authorized_customer_key:
+            result = {"error": "Ticket creation is unavailable for this authenticated session."}
+        else:
+            try:
+                arguments = json.loads(getattr(event, "arguments", "{}"))
+                result = await self.fabric_tools.create_ticket(
+                    arguments,
+                    authorized_customer_key=self.authorized_customer_key,
+                    actor_id=self.client_id,
+                    correlation_id=call_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[VoiceLive] create_support_ticket rejected: %s",
+                    type(exc).__name__,
+                )
+                result = {"error": "The support ticket was not created."}
+        await self.conn.conversation.item.create(
+            item={
+                "type": "function_call_output",
+                "call_id": call_id,
+                "output": json.dumps(result),
+            }
+        )
+        await self.conn.response.create()
 
     async def send_message(self, message: Data):
         """Sends data back to client WebSocket."""

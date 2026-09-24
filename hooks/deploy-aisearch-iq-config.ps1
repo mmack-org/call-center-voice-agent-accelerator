@@ -47,11 +47,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if ($env:ENABLE_FOUNDRY_IQ -ne 'true') {
-    Write-Host "Foundry IQ is disabled; skipping Azure AI Search IQ configuration."
-    exit 0
-}
-
 $EmbeddingDeployment = [string]::IsNullOrWhiteSpace($EmbeddingDeployment) ? 'text-embedding-3-large' : $EmbeddingDeployment
 $EmbeddingModelName = [string]::IsNullOrWhiteSpace($EmbeddingModelName) ? 'text-embedding-3-large' : $EmbeddingModelName
 $ChatCompletionDeployment = [string]::IsNullOrWhiteSpace($ChatCompletionDeployment) ? 'gpt-5.2' : $ChatCompletionDeployment

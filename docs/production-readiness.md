@@ -74,9 +74,8 @@ For production, add dashboards and alerts for:
 
 ### Foundry IQ Knowledge
 
-Foundry IQ is optional and disabled by default. When enabled, it adds Blob
-Storage, Azure AI Search, a managed ingestion pipeline, three model
-deployments, and a Foundry prompt agent to the runtime path. Before production:
+Foundry IQ is always deployed with Blob Storage, Azure AI Search, a managed
+ingestion pipeline, three model deployments, and a Foundry prompt agent. Before production:
 
 - validate regional availability and quota for every configured realtime,
   prompt-agent, answer-synthesis, and embedding model
