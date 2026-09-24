@@ -5,6 +5,11 @@ param tags object
 param exists bool
 param identityId string
 param identityClientId string
+param fabricReadIdentityId string
+param fabricReadIdentityClientId string
+param fabricWriteIdentityId string
+param fabricWriteIdentityClientId string
+param authorizedCustomerKey string = ''
 param containerRegistryName string
 param aiServicesEndpoint string
 param modelDeploymentName string
@@ -68,7 +73,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
   tags: union(tags, { 'azd-service-name': 'app' })
   identity: {
     type: 'UserAssigned'
-    userAssignedIdentities: { '${identityId}': {} }
+    userAssignedIdentities: {
+      '${identityId}': {}
+      '${fabricReadIdentityId}': {}
+      '${fabricWriteIdentityId}': {}
+    }
   }
   properties: {
     managedEnvironmentId: containerAppEnv.id
@@ -156,6 +165,18 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             {
               name: 'AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID'
               value: identityClientId
+            }
+            {
+              name: 'FABRIC_READ_IDENTITY_CLIENT_ID'
+              value: fabricReadIdentityClientId
+            }
+            {
+              name: 'FABRIC_WRITE_IDENTITY_CLIENT_ID'
+              value: fabricWriteIdentityClientId
+            }
+            {
+              name: 'AUTHORIZED_CUSTOMER_KEY'
+              value: authorizedCustomerKey
             }
             {
               name: 'VOICE_LIVE_MODEL'

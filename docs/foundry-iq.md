@@ -157,7 +157,7 @@ Search tokens, and document contents aren't logged by default.
 | Knowledge base is empty | Confirm blobs exist in `AZURE_STORAGE_CONTAINER_NAME`, wait for the five-minute schedule, and inspect the managed indexer execution history. |
 | Blob/indexer ingestion fails | Check the knowledge-source status, indexer execution history, source firewall, and Search identity's source read role. |
 | Agent tool returns 401/403 | Confirm the project identity has Search Index Data Reader and the connection uses `ProjectManagedIdentity` with the Search audience. |
-| Agent doesn't call Foundry IQ | Confirm `ENABLE_FOUNDRY_IQ=true`, the Container App agent/project settings, MCP URL, connection name, and `knowledge_base_retrieve` tool. |
+| Agent doesn't call Foundry IQ | Confirm the `ENABLE_FOUNDRY_IQ` deployment output is `true`, the Container App agent/project settings, MCP URL, connection name, and `knowledge_base_retrieve` tool. |
 | Model or API is unavailable | Choose a region and model version supported by Voice Live, Foundry Agent Service, Search, and the pinned APIs. |
 | No answer for an uploaded document | Wait for Search RBAC propagation and the next indexer run, verify the managed index contains chunks, then rerun `azd provision` if the knowledge source is missing. |
 

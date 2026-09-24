@@ -71,15 +71,21 @@ class VoiceLiveMediaHandler:
         self.fabric_tools = None
         if (
             config.get("FABRIC_WORKSPACE_ID")
+            and config.get("FABRIC_LAKEHOUSE_ID")
             and config.get("FABRIC_DATA_AGENT_ID")
-            and config.get("FABRIC_TICKET_WRITE_ENDPOINT")
+            and config.get("FABRIC_READ_IDENTITY_CLIENT_ID")
+            and config.get("FABRIC_WRITE_IDENTITY_CLIENT_ID")
         ):
             self.fabric_tools = FabricToolService(
                 FabricHttpBackend(
                     workspace_id=config["FABRIC_WORKSPACE_ID"],
+                    lakehouse_id=config["FABRIC_LAKEHOUSE_ID"],
                     data_agent_id=config["FABRIC_DATA_AGENT_ID"],
-                    ticket_write_endpoint=config["FABRIC_TICKET_WRITE_ENDPOINT"],
-                    client_id=self.client_id,
+                    ticket_write_endpoint=config.get(
+                        "FABRIC_TICKET_WRITE_ENDPOINT", ""
+                    ),
+                    read_client_id=config["FABRIC_READ_IDENTITY_CLIENT_ID"],
+                    write_client_id=config["FABRIC_WRITE_IDENTITY_CLIENT_ID"],
                 )
             )
         self.voice = config.get("VOICE_LIVE_VOICE", DEFAULT_VOICE)
@@ -376,26 +382,37 @@ class VoiceLiveMediaHandler:
         """Execute the only supported write tool and return its result to the agent."""
         name = getattr(event, "name", "")
         call_id = getattr(event, "call_id", "")
-        if name != "create_support_ticket":
+        if name not in {
+            "fabric_retrieve_business_data",
+            "create_support_ticket",
+        }:
             logger.warning("[VoiceLive] Rejected unsupported function tool=%s", name)
             return
         if not self.fabric_tools or not self.authorized_customer_key:
-            result = {"error": "Ticket creation is unavailable for this authenticated session."}
+            result = {"error": "This Fabric tool is unavailable for this authenticated session."}
         else:
             try:
                 arguments = json.loads(getattr(event, "arguments", "{}"))
-                result = await self.fabric_tools.create_ticket(
-                    arguments,
-                    authorized_customer_key=self.authorized_customer_key,
-                    actor_id=self.client_id,
-                    correlation_id=call_id,
-                )
+                if name == "fabric_retrieve_business_data":
+                    result = await self.fabric_tools.retrieve(
+                        **arguments,
+                        authorized_customer_key=self.authorized_customer_key,
+                        correlation_id=call_id,
+                    )
+                else:
+                    result = await self.fabric_tools.create_ticket(
+                        arguments,
+                        authorized_customer_key=self.authorized_customer_key,
+                        actor_id=self.client_id,
+                        correlation_id=call_id,
+                    )
             except Exception as exc:
                 logger.warning(
-                    "[VoiceLive] create_support_ticket rejected: %s",
+                    "[VoiceLive] tool=%s rejected error=%s",
+                    name,
                     type(exc).__name__,
                 )
-                result = {"error": "The support ticket was not created."}
+                result = {"error": "The requested Fabric operation was not completed."}
         await self.conn.conversation.item.create(
             item={
                 "type": "function_call_output",
@@ -562,4 +579,10 @@ class VoiceLiveMediaHandler:
             except Exception:
                 pass
             self._credential = None
+        if self.fabric_tools:
+            try:
+                await self.fabric_tools.close()
+            except Exception:
+                pass
+            self.fabric_tools = None
         logger.info("[VoiceLive] Cleaned up")

@@ -44,7 +44,14 @@ app.config["AZURE_AI_FOUNDRY_AGENT_ID"] = os.getenv(
     "AZURE_AI_FOUNDRY_AGENT_ID", ""
 )
 app.config["FABRIC_WORKSPACE_ID"] = os.getenv("FABRIC_WORKSPACE_ID", "")
+app.config["FABRIC_LAKEHOUSE_ID"] = os.getenv("FABRIC_LAKEHOUSE_ID", "")
 app.config["FABRIC_DATA_AGENT_ID"] = os.getenv("FABRIC_DATA_AGENT_ID", "")
+app.config["FABRIC_READ_IDENTITY_CLIENT_ID"] = os.getenv(
+    "FABRIC_READ_IDENTITY_CLIENT_ID", ""
+)
+app.config["FABRIC_WRITE_IDENTITY_CLIENT_ID"] = os.getenv(
+    "FABRIC_WRITE_IDENTITY_CLIENT_ID", ""
+)
 app.config["FABRIC_TICKET_WRITE_ENDPOINT"] = os.getenv(
     "FABRIC_TICKET_WRITE_ENDPOINT", ""
 )

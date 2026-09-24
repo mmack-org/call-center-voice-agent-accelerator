@@ -1,5 +1,18 @@
 # Fabric notebook source
-# Attach this notebook to the provisioned Lakehouse before running it.
+# METADATA ********************
+# META {
+# META   "kernel_info": {
+# META     "name": "synapse_pyspark"
+# META   },
+# META   "dependencies": {
+# META     "lakehouse": {
+# META       "default_lakehouse": "__LAKEHOUSE_ID__",
+# META       "default_lakehouse_name": "__LAKEHOUSE_NAME__",
+# META       "default_lakehouse_workspace_id": "__WORKSPACE_ID__"
+# META     }
+# META   }
+# META }
+# CELL ********************
 
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -169,27 +182,31 @@ def write_table(frame, name):
     ).saveAsTable(name)
 
 
-dim_product = spark.read.schema(product_schema).option("header", True).csv(
-    f"{RAW}/products.csv"
+dim_product = (
+    spark.read.schema(product_schema).option("header", True).csv(f"{RAW}/products.csv")
 )
-dim_range = spark.read.schema(range_schema).option("header", True).csv(
-    f"{RAW}/ranges.csv"
+dim_range = (
+    spark.read.schema(range_schema).option("header", True).csv(f"{RAW}/ranges.csv")
 )
-dim_document = spark.read.schema(document_schema).option("header", True).csv(
-    f"{RAW}/documents.csv"
+dim_document = (
+    spark.read.schema(document_schema)
+    .option("header", True)
+    .csv(f"{RAW}/documents.csv")
 )
-dim_customer = spark.read.schema(customer_schema).option("header", True).csv(
-    f"{RAW}/customers.csv"
+dim_customer = (
+    spark.read.schema(customer_schema)
+    .option("header", True)
+    .csv(f"{RAW}/customers.csv")
 )
-bridge_installed_base = spark.read.schema(installed_base_schema).option(
-    "header", True
-).csv(f"{RAW}/installed-base.csv")
-contacts = spark.read.schema(party_schema).option("header", True).csv(
-    f"{RAW}/contacts.csv"
+bridge_installed_base = (
+    spark.read.schema(installed_base_schema)
+    .option("header", True)
+    .csv(f"{RAW}/installed-base.csv")
 )
-agents = spark.read.schema(party_schema).option("header", True).csv(
-    f"{RAW}/agents.csv"
+contacts = (
+    spark.read.schema(party_schema).option("header", True).csv(f"{RAW}/contacts.csv")
 )
+agents = spark.read.schema(party_schema).option("header", True).csv(f"{RAW}/agents.csv")
 raw_tickets = spark.read.schema(ticket_schema).json(f"{RAW}/tickets-savoye.jsonl")
 
 for schema_name in ("bronze", "silver", "gold"):
@@ -222,7 +239,7 @@ fact_ticket = raw_tickets.select(
     F.col("donnees_fictives").alias("is_mock_data"),
     F.size("conversation").alias("message_count"),
     "csat",
-    "csat_comment",
+    F.lit(None).cast("string").alias("csat_comment"),
 ).withColumns(
     {
         "created_date_key": F.date_format("created_at", "yyyyMMdd").cast("int"),
@@ -240,7 +257,7 @@ fact_ticket_message = raw_tickets.select(
     F.col("message.message_id").alias("message_id"),
     F.to_timestamp("message.timestamp").alias("message_at"),
     F.col("message.auteur").alias("author_type"),
-    F.col("message.corps").alias("message_body"),
+    F.lit(None).cast("string").alias("message_body"),
 )
 fact_part_consumption = raw_tickets.select(
     "ticket_id", F.explode_outer("pieces").alias("part")
@@ -285,13 +302,21 @@ write_table(dim_document, "gold.dim_document")
 write_table(dim_date, "gold.dim_date")
 write_table(
     contacts.select(
-        F.col("key").alias("contact_key"), "customer_key", "name", "email", "phone"
+        F.col("key").alias("contact_key"),
+        "customer_key",
+        "name",
+        F.when(
+            F.instr("email", "@") > 0,
+            F.concat(F.lit("***@"), F.element_at(F.split("email", "@"), -1)),
+        ).alias("email_masked"),
+        F.when(
+            F.length("phone") >= 4,
+            F.concat(F.lit("*******"), F.substring("phone", -4, 4)),
+        ).alias("phone_masked"),
     ),
     "silver.dim_customer_contact",
 )
-write_table(
-    agents.select(F.col("key").alias("agent_key"), "name"), "gold.dim_agent"
-)
+write_table(agents.select(F.col("key").alias("agent_key"), "name"), "gold.dim_agent")
 write_table(bridge_installed_base, "gold.bridge_installed_base")
 write_table(fact_ticket, "gold.fact_ticket")
 write_table(fact_ticket_message, "silver.fact_ticket_message")
@@ -303,14 +328,16 @@ checks = {
     "ticket_customer_fk": fact_ticket.join(
         dim_customer, "customer_key", "left_anti"
     ).count(),
-    "ticket_product_fk": fact_ticket.where(F.col("product_key").isNotNull()).join(
-        dim_product, "product_key", "left_anti"
-    ).count(),
-    "installed_product": fact_ticket.where(F.col("product_key").isNotNull()).join(
+    "ticket_product_fk": fact_ticket.where(F.col("product_key").isNotNull())
+    .join(dim_product, "product_key", "left_anti")
+    .count(),
+    "installed_product": fact_ticket.where(F.col("product_key").isNotNull())
+    .join(
         bridge_installed_base.select("customer_key", "product_key"),
         ["customer_key", "product_key"],
         "left_anti",
-    ).count(),
+    )
+    .count(),
     "cost_total": fact_ticket.where(
         F.abs(
             F.coalesce("parts_cost_eur", F.lit(0))
@@ -352,7 +379,9 @@ baseline = {
     "tickets": fact_ticket.count(),
     "messages": fact_ticket_message.count(),
     "parts": fact_part_consumption.where(F.col("part_key").isNotNull()).count(),
-    "escalations": fact_ticket_escalation.where(F.col("escalated_at").isNotNull()).count(),
+    "escalations": fact_ticket_escalation.where(
+        F.col("escalated_at").isNotNull()
+    ).count(),
     "csat": fact_ticket.where(F.col("csat").isNotNull()).count(),
 }
 expected = {
@@ -364,3 +393,55 @@ expected = {
 }
 if baseline != expected:
     raise ValueError(f"Mock baseline mismatch: expected {expected}, got {baseline}")
+measures = fact_ticket.agg(
+    (F.avg(F.col("is_sla_met").cast("double")) * 100).alias("sla_percent"),
+    F.avg("csat").alias("average_csat"),
+    F.sum("total_cost_eur").alias("total_cost_eur"),
+).first()
+if (
+    round(measures.sla_percent, 1) != 89.4
+    or round(float(measures.average_csat), 2) != 4.13
+    or round(float(measures.total_cost_eur), 2) != 3488507.00
+):
+    raise ValueError(f"Mock aggregate baseline mismatch: {measures.asDict()}")
+
+# The server-side write tool creates one immutable JSON file per idempotency key.
+# Rebuild the Gold ticket table from the mock baseline plus that durable inbox.
+try:
+    ticket_inbox = spark.read.json(f"{RAW}/support-ticket-inbox/*.json")
+except Exception:
+    ticket_inbox = None
+if ticket_inbox is not None:
+    created_tickets = ticket_inbox.select(
+        "ticket_id",
+        "customer_key",
+        "product_key",
+        "contact_key",
+        F.lit(None).cast("string").alias("agent_key"),
+        "subject",
+        "description",
+        "category",
+        "priority",
+        "status",
+        F.to_timestamp("created_at").alias("created_at"),
+        F.lit(None).cast("timestamp").alias("first_response_at"),
+        F.lit(None).cast("timestamp").alias("closed_at"),
+        F.lit(None).cast("boolean").alias("is_sla_met"),
+        F.lit(None).cast("int").alias("sla_target_minutes"),
+        F.lit(None).cast("int").alias("sla_actual_minutes"),
+        F.lit(None).cast("decimal(12,2)").alias("parts_cost_eur"),
+        F.lit(None).cast("decimal(12,2)").alias("labour_cost_eur"),
+        F.lit(None).cast("decimal(12,2)").alias("total_cost_eur"),
+        F.lit(False).alias("is_mock_data"),
+        F.lit(0).alias("message_count"),
+        F.lit(None).cast("decimal(3,2)").alias("csat"),
+        F.lit(None).cast("string").alias("csat_comment"),
+        F.date_format("created_at", "yyyyMMdd").cast("int").alias("created_date_key"),
+        F.lit(None).cast("int").alias("closed_date_key"),
+        F.year("created_at").alias("created_year"),
+        F.month("created_at").alias("created_month"),
+    )
+    write_table(
+        fact_ticket.unionByName(created_tickets).dropDuplicates(["ticket_id"]),
+        "gold.fact_ticket",
+    )

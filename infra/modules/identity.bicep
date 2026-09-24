@@ -1,10 +1,13 @@
 param location string
 param environmentName string
 param uniqueSuffix string
+param purpose string = ''
 
 var sanitizedEnvName = toLower(replace(replace(replace(environmentName, ' ', ''), '--', ''), '_', ''))
 
-var userIdentityName = take('${sanitizedEnvName}-${uniqueSuffix}-id', 32)
+var userIdentityName = empty(purpose)
+  ? take('${sanitizedEnvName}-${uniqueSuffix}-id', 32)
+  : take('${purpose}-${sanitizedEnvName}-${uniqueSuffix}-id', 32)
 
 resource appIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: userIdentityName

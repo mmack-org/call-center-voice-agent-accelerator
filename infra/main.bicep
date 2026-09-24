@@ -134,6 +134,8 @@ param fabricWorkspaceName string = ''
 param fabricLakehouseName string = 'call_center'
 @description('Microsoft Fabric Data Agent display name.')
 param fabricDataAgentName string = 'call-center-data-agent'
+@description('Authenticated customer scope for single-tenant demo sessions. Leave empty to disable ticket writes until an identity layer supplies it.')
+param authorizedCustomerKey string = ''
 
 var uniqueSuffix = substring(uniqueString(subscription().id, environmentName), 0, 5)
 var tags = {
@@ -156,6 +158,28 @@ module appIdentity './modules/identity.bicep' = {
     location: location
     environmentName: environmentName
     uniqueSuffix: uniqueSuffix
+  }
+}
+
+module fabricReadIdentity './modules/identity.bicep' = {
+  name: 'fabric-read-uami'
+  scope: rg
+  params: {
+    location: location
+    environmentName: environmentName
+    uniqueSuffix: uniqueSuffix
+    purpose: 'fabric-read'
+  }
+}
+
+module fabricWriteIdentity './modules/identity.bicep' = {
+  name: 'fabric-write-uami'
+  scope: rg
+  params: {
+    location: location
+    environmentName: environmentName
+    uniqueSuffix: uniqueSuffix
+    purpose: 'fabric-write'
   }
 }
 
@@ -305,6 +329,11 @@ module containerapp 'modules/containerapp.bicep' = {
     exists: appExists
     identityId: appIdentity.outputs.identityId
     identityClientId: appIdentity.outputs.clientId
+    fabricReadIdentityId: fabricReadIdentity.outputs.identityId
+    fabricReadIdentityClientId: fabricReadIdentity.outputs.clientId
+    fabricWriteIdentityId: fabricWriteIdentity.outputs.identityId
+    fabricWriteIdentityClientId: fabricWriteIdentity.outputs.clientId
+    authorizedCustomerKey: authorizedCustomerKey
     containerRegistryName: registry.outputs.name
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
     modelDeploymentName: aiServices.outputs.modelDeploymentName
@@ -338,6 +367,9 @@ output AZURE_TENANT_ID string = tenant().tenantId
 output AZURE_RESOURCE_GROUP string = rg.name
 output AZURE_USER_ASSIGNED_IDENTITY_ID string = appIdentity.outputs.identityId
 output AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID string = appIdentity.outputs.clientId
+output AZURE_USER_ASSIGNED_IDENTITY_PRINCIPAL_ID string = appIdentity.outputs.principalId
+output FABRIC_READ_IDENTITY_PRINCIPAL_ID string = fabricReadIdentity.outputs.principalId
+output FABRIC_WRITE_IDENTITY_PRINCIPAL_ID string = fabricWriteIdentity.outputs.principalId
 
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.outputs.loginServer
 output AZURE_CONTAINER_APP_NAME string = containerapp.outputs.containerAppName

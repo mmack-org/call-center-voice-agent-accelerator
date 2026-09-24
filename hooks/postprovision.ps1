@@ -105,7 +105,6 @@ $projectEndpoint = Get-AzdEnvironmentValue -Name "AZURE_AI_FOUNDRY_PROJECT_ENDPO
 $projectConnectionName = Get-AzdEnvironmentValue -Name "AZURE_FOUNDRY_IQ_CONNECTION_NAME" -Required
 $agentName = Get-AzdEnvironmentValue -Name "AZURE_AI_FOUNDRY_AGENT_ID" -Required
 $agentModelDeployment = Get-AzdEnvironmentValue -Name "AZURE_AI_AGENT_MODEL_DEPLOYMENT" -Required
-$fabricConnectionName = Get-AzdEnvironmentValue -Name "AZURE_FABRIC_DATA_AGENT_CONNECTION_NAME" -Required
 
 $searchApiVersion = "2026-08-01-preview"
 $mcpEndpoint = "$searchEndpoint/knowledgebases/$knowledgeBaseName/mcp?api-version=$searchApiVersion"
@@ -147,11 +146,24 @@ $agentDefinition = @{
             allowed_tools = @("knowledge_base_retrieve")
         }
         @{
-            type = "fabric_dataagent_preview"
-            fabric_dataagent_preview = @{
-                project_connections = @(
-                    @{ project_connection_id = $fabricConnectionName }
-                )
+            type = "function"
+            name = "fabric_retrieve_business_data"
+            description = "Retrieve authorized customer, product, installed-base, or support-ticket information from Microsoft Fabric."
+            strict = $true
+            parameters = @{
+                type = "object"
+                additionalProperties = $false
+                required = @("intent", "customer_key", "product_key", "ticket_id", "query")
+                properties = @{
+                    intent = @{
+                        type = "string"
+                        enum = @("customer", "installed_products", "product", "ticket", "similar_cases")
+                    }
+                    customer_key = @{ type = @("string", "null") }
+                    product_key = @{ type = @("string", "null") }
+                    ticket_id = @{ type = @("string", "null") }
+                    query = @{ type = @("string", "null") }
+                }
             }
         }
         @{
@@ -163,8 +175,9 @@ $agentDefinition = @{
                 type = "object"
                 additionalProperties = $false
                 required = @(
-                    "customer_key", "subject", "description", "priority",
-                    "user_confirmed", "conversation_id", "idempotency_key"
+                    "customer_key", "contact_key", "product_key", "subject",
+                    "description", "category", "priority", "user_confirmed",
+                    "conversation_id", "idempotency_key"
                 )
                 properties = @{
                     customer_key = @{ type = "string" }
@@ -223,7 +236,7 @@ elseif ([int]$agentResponse.StatusCode -eq 200) {
         Where-Object { $_.type -eq "mcp" -and $_.server_label -eq "knowledge-base" } |
         Select-Object -First 1
     $existingFabricTool = @($existingDefinition.tools) |
-        Where-Object { $_.type -eq "fabric_dataagent_preview" } |
+        Where-Object { $_.type -eq "function" -and $_.name -eq "fabric_retrieve_business_data" } |
         Select-Object -First 1
     $existingTicketTool = @($existingDefinition.tools) |
         Where-Object { $_.type -eq "function" -and $_.name -eq "create_support_ticket" } |

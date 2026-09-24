@@ -83,6 +83,19 @@ class FabricToolTests(unittest.TestCase):
                 )
             )
 
+    def test_retrieval_drops_rows_without_customer_scope(self):
+        self.backend.rows = [{"product_key": "PROD-1", "source_id": "product/1"}]
+
+        result = asyncio.run(
+            self.service.retrieve(
+                intent="product",
+                authorized_customer_key="CUST-001",
+                product_key="PROD-1",
+            )
+        )
+
+        self.assertEqual(result["results"], [])
+
     def test_empty_retrieval_does_not_invent_results(self):
         result = asyncio.run(
             self.service.retrieve(
@@ -124,6 +137,24 @@ class FabricToolTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(len(self.backend.created), 1)
+
+    def test_idempotency_is_scoped_to_authenticated_customer(self):
+        asyncio.run(
+            self.service.create_ticket(
+                ticket_request(),
+                authorized_customer_key="CUST-001",
+                actor_id="agent-1",
+            )
+        )
+        asyncio.run(
+            self.service.create_ticket(
+                ticket_request(customer_key="CUST-002"),
+                authorized_customer_key="CUST-002",
+                actor_id="agent-1",
+            )
+        )
+
+        self.assertEqual(len(self.backend.created), 2)
 
     def test_ticket_rejects_model_owned_server_fields(self):
         with self.assertRaises(ToolValidationError):

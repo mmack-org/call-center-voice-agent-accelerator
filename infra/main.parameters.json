@@ -136,6 +136,9 @@
     },
     "fabricDataAgentName": {
       "value": "${FABRIC_DATA_AGENT_NAME=call-center-data-agent}"
+    },
+    "authorizedCustomerKey": {
+      "value": "${AUTHORIZED_CUSTOMER_KEY=}"
     }
   }
 }

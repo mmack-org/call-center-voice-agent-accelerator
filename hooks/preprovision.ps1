@@ -28,6 +28,12 @@ if (-not $account) {
 }
 Write-Host "Subscription: $($account.name) ($($account.id))" -ForegroundColor Green
 
+az provider register --namespace Microsoft.Fabric --wait --output none
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Unable to register the Microsoft.Fabric resource provider." -ForegroundColor Red
+    exit 1
+}
+
 $fabricAdmin = azd env get-value FABRIC_CAPACITY_ADMIN 2>$null
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($fabricAdmin)) {
     $fabricAdmin = $account.user.name

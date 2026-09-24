@@ -16,6 +16,9 @@ class FakeConnection:
     def __init__(self):
         self.session = SimpleNamespace(update=AsyncMock())
         self.response = SimpleNamespace(create=AsyncMock())
+        self.conversation = SimpleNamespace(
+            item=SimpleNamespace(create=AsyncMock())
+        )
 
     def __aiter__(self):
         async def events():
@@ -186,6 +189,70 @@ class FoundryIqConfigurationTests(unittest.TestCase):
 
         self.assertEqual(VoiceLiveMediaHandler._mcp_result_count(output), 1)
         self.assertEqual(VoiceLiveMediaHandler._mcp_result_count(""), 0)
+
+    def test_confirmed_ticket_function_returns_created_reference(self):
+        handler = VoiceLiveMediaHandler(make_config(True))
+        handler.authorized_customer_key = "CUST-001"
+        handler.fabric_tools = SimpleNamespace(
+            create_ticket=AsyncMock(
+                return_value={"ticket_id": "TKT-2026-002852", "status": "Open"}
+            )
+        )
+        handler.conn = FakeConnection()
+        event = SimpleNamespace(
+            name="create_support_ticket",
+            call_id="call-1",
+            arguments=(
+                '{"customer_key":"CUST-001","subject":"Conveyor stopped",'
+                '"description":"The conveyor stopped with fault E42.",'
+                '"priority":"P2","user_confirmed":true,'
+                '"conversation_id":"conversation-1","idempotency_key":"request-1"}'
+            ),
+        )
+
+        asyncio.run(handler._handle_function_call(event))
+
+        handler.fabric_tools.create_ticket.assert_awaited_once()
+        output = handler.conn.conversation.item.create.await_args.kwargs["item"]
+        self.assertIn("TKT-2026-002852", output["output"])
+
+    def test_fabric_retrieval_injects_authenticated_customer(self):
+        handler = VoiceLiveMediaHandler(make_config(True))
+        handler.authorized_customer_key = "CUST-001"
+        handler.fabric_tools = SimpleNamespace(
+            retrieve=AsyncMock(
+                return_value={"results": [], "result_count": 0, "message": "No match"}
+            )
+        )
+        handler.conn = FakeConnection()
+        event = SimpleNamespace(
+            name="fabric_retrieve_business_data",
+            call_id="call-1",
+            arguments=(
+                '{"intent":"ticket","customer_key":"CUST-001",'
+                '"product_key":null,"ticket_id":"TKT-2026-1","query":null}'
+            ),
+        )
+
+        asyncio.run(handler._handle_function_call(event))
+
+        _, kwargs = handler.fabric_tools.retrieve.await_args
+        self.assertEqual(kwargs["authorized_customer_key"], "CUST-001")
+        self.assertEqual(kwargs["customer_key"], "CUST-001")
+
+    def test_ticket_function_fails_closed_without_authenticated_customer(self):
+        handler = VoiceLiveMediaHandler(make_config(True))
+        handler.conn = FakeConnection()
+        event = SimpleNamespace(
+            name="create_support_ticket",
+            call_id="call-1",
+            arguments="{}",
+        )
+
+        asyncio.run(handler._handle_function_call(event))
+
+        output = handler.conn.conversation.item.create.await_args.kwargs["item"]
+        self.assertIn("unavailable", output["output"])
 
 
 if __name__ == "__main__":
