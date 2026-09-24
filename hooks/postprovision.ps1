@@ -99,12 +99,6 @@ function Invoke-AzureRequestWithRetry {
     }
 }
 
-$enabled = Get-AzdEnvironmentValue -Name "ENABLE_FOUNDRY_IQ"
-if ($enabled -ne "true") {
-    Write-Host "Foundry IQ is disabled; skipping Foundry agent configuration."
-    exit 0
-}
-
 $searchEndpoint = Get-AzdEnvironmentValue -Name "AZURE_AI_SEARCH_ENDPOINT" -Required
 $knowledgeBaseName = Get-AzdEnvironmentValue -Name "AZURE_FOUNDRY_IQ_KNOWLEDGE_BASE_NAME" -Required
 $projectEndpoint = Get-AzdEnvironmentValue -Name "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT" -Required
@@ -125,8 +119,15 @@ Répondez en français par défaut, avec un ton professionnel, empathique et
 naturel adapté à une conversation téléphonique. Utilisez l'outil de base de
 connaissances pour toute question de support ou demande factuelle. Fondez chaque
 réponse factuelle sur le contenu récupéré et n'inventez jamais d'information.
+Utilisez l'outil Fabric uniquement en lecture pour les clients, produits installés
+et tickets. Limitez chaque recherche au client authentifié et ne révélez jamais
+les coordonnées, le corps des messages ou les commentaires CSAT.
 Si la base ne contient pas assez d'éléments, dites-le clairement et proposez
-une clarification ou une escalade vers un conseiller humain. Donnez des réponses
+une clarification. Si le problème reste sans solution, proposez de créer un ticket,
+recueillez les informations minimales, résumez-les, puis demandez une confirmation
+explicite. N'appelez create_support_ticket qu'après un oui non ambigu, une seule fois
+avec une clé d'idempotence, puis lisez la référence retournée. N'appelez jamais cet
+outil si l'utilisateur refuse. Donnez des réponses
 courtes et directement actionnables. Ne lisez jamais à voix haute les URL, les
 identifiants de source ni la syntaxe des citations.
 "@.Trim()
@@ -143,6 +144,54 @@ $agentDefinition = @{
             project_connection_id = $projectConnectionName
             require_approval = "never"
             allowed_tools = @("knowledge_base_retrieve")
+        }
+        @{
+            type = "function"
+            name = "fabric_retrieve_business_data"
+            description = "Retrieve authorized customer, product, installed-base, or support-ticket information from Microsoft Fabric."
+            strict = $true
+            parameters = @{
+                type = "object"
+                additionalProperties = $false
+                required = @("intent", "customer_key", "product_key", "ticket_id", "query")
+                properties = @{
+                    intent = @{
+                        type = "string"
+                        enum = @("customer", "installed_products", "product", "ticket", "similar_cases")
+                    }
+                    customer_key = @{ type = @("string", "null") }
+                    product_key = @{ type = @("string", "null") }
+                    ticket_id = @{ type = @("string", "null") }
+                    query = @{ type = @("string", "null") }
+                }
+            }
+        }
+        @{
+            type = "function"
+            name = "create_support_ticket"
+            description = "Create one support ticket only after explicit user confirmation."
+            strict = $true
+            parameters = @{
+                type = "object"
+                additionalProperties = $false
+                required = @(
+                    "customer_key", "contact_key", "product_key", "subject",
+                    "description", "category", "priority", "user_confirmed",
+                    "conversation_id", "idempotency_key"
+                )
+                properties = @{
+                    customer_key = @{ type = "string" }
+                    contact_key = @{ type = @("string", "null") }
+                    product_key = @{ type = @("string", "null") }
+                    subject = @{ type = "string"; minLength = 5; maxLength = 120 }
+                    description = @{ type = "string"; minLength = 10; maxLength = 4000 }
+                    category = @{ type = @("string", "null") }
+                    priority = @{ type = "string"; enum = @("P1", "P2", "P3", "P4") }
+                    user_confirmed = @{ type = "boolean"; const = $true }
+                    conversation_id = @{ type = "string" }
+                    idempotency_key = @{ type = "string" }
+                }
+            }
         }
     )
 }
@@ -186,6 +235,12 @@ elseif ([int]$agentResponse.StatusCode -eq 200) {
     $existingTool = @($existingDefinition.tools) |
         Where-Object { $_.type -eq "mcp" -and $_.server_label -eq "knowledge-base" } |
         Select-Object -First 1
+    $existingFabricTool = @($existingDefinition.tools) |
+        Where-Object { $_.type -eq "function" -and $_.name -eq "fabric_retrieve_business_data" } |
+        Select-Object -First 1
+    $existingTicketTool = @($existingDefinition.tools) |
+        Where-Object { $_.type -eq "function" -and $_.name -eq "create_support_ticket" } |
+        Select-Object -First 1
     $existingAllowedTools = @()
     if ($null -ne $existingTool -and $null -ne $existingTool.PSObject.Properties["allowed_tools"]) {
         $allowedTools = $existingTool.allowed_tools
@@ -203,6 +258,8 @@ elseif ([int]$agentResponse.StatusCode -eq 200) {
         $existingDefinition.model -ne $agentDefinition.model -or
         $existingDefinition.instructions -ne $agentDefinition.instructions -or
         $null -eq $existingTool -or
+        $null -eq $existingFabricTool -or
+        $null -eq $existingTicketTool -or
         $existingTool.server_url -ne $mcpEndpoint -or
         $existingTool.project_connection_id -ne $projectConnectionName -or
         $existingTool.require_approval -ne "never" -or

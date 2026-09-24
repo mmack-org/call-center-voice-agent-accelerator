@@ -23,6 +23,11 @@ hooks:
     interactive: true
     continueOnError: false
   postprovision:
+    - name: deploy-fabric
+      shell: pwsh
+      run: ./hooks/deploy-fabric.ps1
+      interactive: true
+      continueOnError: false
     - name: deploy-aisearch-config
       shell: pwsh
       run: ./hooks/deploy-aisearch-iq-config.ps1
@@ -46,6 +51,7 @@ pipeline:
     - AZURE_LOCATION
     - AZURE_RESOURCE_GROUP
     - AZURE_CONTAINER_REGISTRY_ENDPOINT
+    - AZURE_CONTAINER_APP_NAME
     - SERVICE_API_ENDPOINTS
     - AZURE_VOICE_LIVE_ENDPOINT
     - AZURE_VOICE_LIVE_MODEL
@@ -78,6 +84,18 @@ pipeline:
     - AZURE_AI_AGENT_MODEL_NAME
     - AZURE_AI_AGENT_MODEL_VERSION
     - AZURE_AI_AGENT_MODEL_DEPLOYMENT
+    - AZURE_USER_ASSIGNED_IDENTITY_PRINCIPAL_ID
+    - FABRIC_READ_IDENTITY_PRINCIPAL_ID
+    - FABRIC_WRITE_IDENTITY_PRINCIPAL_ID
+    - FABRIC_CAPACITY_ID
+    - FABRIC_CAPACITY_NAME
+    - FABRIC_WORKSPACE_NAME
+    - FABRIC_WORKSPACE_ID
+    - FABRIC_LAKEHOUSE_NAME
+    - FABRIC_LAKEHOUSE_ID
+    - FABRIC_INGESTION_NOTEBOOK_ID
+    - FABRIC_DATA_AGENT_NAME
+    - FABRIC_DATA_AGENT_ID
     - TWILIO_ACCOUNT_SID
     - INFOBIP_API_BASE_URL
     - SINCH_APPLICATION_KEY

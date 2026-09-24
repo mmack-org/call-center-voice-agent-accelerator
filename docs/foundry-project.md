@@ -70,7 +70,7 @@ automatic upgrades to keep production behavior repeatable.
 This realtime deployment is also the default runtime path when Foundry IQ is
 disabled. To route Voice Live sessions through a grounded prompt agent and an
 Azure AI Search knowledge base instead, follow
-[Foundry IQ knowledge for voice calls](./foundry-iq.md). That optional path
+[Foundry IQ knowledge for voice calls](./foundry-iq.md). That path
 provisions additional chat and embedding model deployments; changing the
 realtime model settings does not change those Foundry IQ deployments.
 
